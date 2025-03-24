@@ -9,14 +9,16 @@ import nn_shared_memory
 import time
 import numpy as np
 import nn_utils
+import struct
+import parameter_parser
 
 # ====  SPI recording loop  ====
-def recorderLoop():
+def recorderLoop(acq_params):
 
     print("\n-----  NinjaNIRS 2024 byte stream recorder  -----\n")
     print("Press Ctrl-C to exit.\n")
-
-    nn = NN24SystemClass.NNSystem()
+    # acq_params = parameter_parser.ParameterParser()
+    nn = NN24SystemClass.NNSystem(acq_params.srcram)
     nn.flush()
     nn_gpios = nn_utils.NN_GPIOS()
     sm = nn_shared_memory.NNSharedMemory(main=False)
@@ -35,8 +37,10 @@ def recorderLoop():
     run_event_last = 0
     run_event_curr = 0
     nn.flush()
+    sm.SYS_STATUS.buf[:4] = struct.pack("i", np.int32(nn.n_detb_active))
+    sm.SYS_STATUS.buf[4] = int(nn.aux_active)
+    sm.SYS_STATUS.buf[5] = int(nn.acc_active)
 
-    
     while not sm.status_shm.buf[sm.STATUS_SHM_IDX['shutdown']]:
         run_event_curr = sm.status_shm.buf[sm.STATUS_SHM_IDX['run']]
 
@@ -93,16 +97,39 @@ def recorderLoop():
             if bytes_available > 0:
                 # there should be no bytes when sys is not running
                 nn.spi.readbytes(2 + bytes_available) # flush
+            calib_level = struct.unpack('H', sm.power_calib_level.buf[:2])[0]
+            if calib_level == 8:
+                shared_arr_loaded = np.ndarray((7, 1024, 32), dtype=np.uint16, buffer=sm.srcram.buf)
+                acq_params.srcram = np.copy(shared_arr_loaded)
+                nn.updateSrcRAM(acq_params.srcram)
+                sm.power_calib_level.buf[:2] = struct.pack('H', 0)
+                print('srcram updated')
             time.sleep(0.02)
 
         # system just started running
         if run_event_last==0 and run_event_curr==1:
             # Open binary and logging files
-            fname_bin, fname_log = nn_utils.getFileNames()
-            print(f"Opening {fname_bin}")
-            fbin = open(fname_bin, "wb")
-            flog = open(fname_log, "w")
-
+            if not sm.status_shm.buf[sm.STATUS_SHM_IDX['power_calib']]:
+                fname_bin, fname_log = nn_utils.getFileNames()
+                print(f"Opening {fname_bin}")
+                fbin = open(fname_bin, "wb")
+                flog = open(fname_log, "w")
+            else:
+                calib_level = struct.unpack('H', sm.power_calib_level.buf[:2])[0]
+                if calib_level == 0:
+                    fname_bin, fname_log = nn_utils.getFileNames(is_calib=True, calib_level=calib_level)
+                else:
+                    fname_bin = fname_bin.replace(f'LEDPowerCalibration_{calib_level-1:02d}',
+                                                  f'LEDPowerCalibration_{calib_level:02d}')
+                    fname_log = fname_log.replace(f'LEDPowerCalibration_{calib_level-1:02d}',
+                                                  f'LEDPowerCalibration_{calib_level:02d}')
+                print(f"Opening {fname_bin}")
+                fbin = open(fname_bin, "wb")
+                flog = open(fname_log, "w")
+                # update srcram
+                shared_arr_loaded = np.ndarray((7, 1024, 32), dtype=np.uint16, buffer=sm.srcram.buf)
+                acq_params.srcram = np.copy(shared_arr_loaded)
+                nn.updateSrcRAM(acq_params.srcram)
             nn.startAcq()
             nn_gpios.led_set('green', True)
             last_report_time = time.perf_counter()

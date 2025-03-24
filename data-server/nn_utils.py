@@ -1,35 +1,49 @@
 import RPi.GPIO as GPIO
 import os
+import datetime
 
 
 # The raspberry pi will not have a correct system time if not connected to the internet,
 # thus creating filenames with timestamps does not make sense. Instead use an increasing
 # counter as the filename root.
-def getFileNames():
-    SAVE_FOLD = "../meas/"
-
-    counter_file = SAVE_FOLD + "file_counter.txt"
-    if os.path.exists(counter_file):
-        with open(counter_file, 'r') as f:
-            counter = int(f.read().strip())
+def getFileNames(is_calib = False, calib_level = 0):
+    data_dir = os.path.join('..', 'meas', datetime.datetime.now().strftime('%y-%m-%d'))
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+    if not is_calib:
+        filename = 'ninjaWeb_'+datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        filename_bin = os.path.join(data_dir,filename+'.bin')
+        filename_log = os.path.join(data_dir, filename + '.log')
     else:
-        counter = 0
+        calib_folder = os.path.join(data_dir, 'LEDPowerCalibration')
+        if not os.path.exists(calib_folder):
+            os.makedirs(calib_folder)
+        filename = f'LEDPowerCalibration_{calib_level:02d}_' + datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        filename_bin = os.path.join(calib_folder, filename + '.bin')
+        filename_log = os.path.join(calib_folder, filename + '.log')
 
-    fname_root = f"{counter:04}_NN24"
+    # counter_file = SAVE_FOLD + "file_counter.txt"
+    # if os.path.exists(counter_file):
+    #     with open(counter_file, 'r') as f:
+    #         counter = int(f.read().strip())
+    # else:
+    #     counter = 0
+    #
+    # fname_root = f"{counter:04}_NN24"
+    #
+    # # make sure .bin and .log files don't exist
+    # while os.path.exists(SAVE_FOLD + fname_root + ".bin") or os.path.exists(SAVE_FOLD + fname_root + ".log"):
+    #     counter += 1
+    #     fname_root = f"{counter:04}_NN24"
+    #
+    # # Store counter of next filename to use
+    # with open(counter_file, 'w') as f:
+    #     f.write(str(counter+1))
+    #
+    # fname_bin = SAVE_FOLD + fname_root + ".bin"
+    # fname_log = SAVE_FOLD + fname_root + ".log"
 
-    # make sure .bin and .log files don't exist
-    while os.path.exists(SAVE_FOLD + fname_root + ".bin") or os.path.exists(SAVE_FOLD + fname_root + ".log"):
-        counter += 1
-        fname_root = f"{counter:04}_NN24"
-
-    # Store counter of next filename to use
-    with open(counter_file, 'w') as f:
-        f.write(str(counter+1))
-
-    fname_bin = SAVE_FOLD + fname_root + ".bin"
-    fname_log = SAVE_FOLD + fname_root + ".log"
-
-    return fname_bin, fname_log
+    return filename_bin, filename_log
 
 
 

@@ -1,9 +1,20 @@
-from scipy import io 
+import os
+import configparser
+from scipy import io
 from bokeh.plotting import figure
-from bokeh.models import GraphRenderer, Circle,  StaticLayoutProvider, MultiLine, NodesAndLinkedEdges
+from bokeh.models import GraphRenderer, Circle,  StaticLayoutProvider, MultiLine, NodesAndLinkedEdges, EdgesOnly
 
 def gen_probe_plot():
-    sd_fname = './web-app/fullhead_56x144_v2.SD.mat'
+    file_dir = os.path.dirname(os.path.realpath(__file__))
+    config_file_path = os.path.join(file_dir, '..','..', 'probes', 'Config.cfg')
+    config = configparser.ConfigParser()
+    config.read(config_file_path)
+
+    # load SD file
+    probe_filename = config['Probe']['filename']
+    sd_fname = os.path.join(file_dir, '..', '..', 'probes', probe_filename)
+
+    # sd_fname = './web-app/fullhead_56x144_v2.SD.mat'
 
     sd_data = io.loadmat(sd_fname)
 
@@ -53,7 +64,7 @@ def gen_probe_plot():
         start=list(ml_onewl[:, 0] -1),
         end=list(ml_onewl[:, 1] + n_src -1))
     
-    graph.selection_policy = NodesAndLinkedEdges()#NodesOnly()
+    graph.selection_policy = EdgesOnly() #NodesAndLinkedEdges()#NodesOnly()
     #graph.inspection_policy = NodesAndLinkedEdges()
 
     # convert the ``x`` and ``y`` lists into a dictionary of 2D-coordinates

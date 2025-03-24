@@ -7,14 +7,16 @@
 import nn_shared_memory
 import nn_data_recorder
 import nn_parser
-from multiprocessing import Process
+from multiprocessing import Process, Queue
 
 if __name__ == "__main__":
     try:
         sm = nn_shared_memory.NNSharedMemory(main=True)
-        parser = Process(target=nn_parser.parserLoop)
+        queue = Queue()
+        parser = Process(target=nn_parser.parserLoop, args=(queue,))
         parser.start()
-        nn_data_recorder.recorderLoop()
+        acq_params = queue.get()
+        nn_data_recorder.recorderLoop(acq_params)
 
     except KeyboardInterrupt: # Close the program by pressing Ctrl-C
         sm.status_shm[sm.STATUS_SHM_IDX['shutdown']] = True
