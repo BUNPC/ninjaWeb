@@ -2,45 +2,82 @@
 from tokenize import endpats
 
 import nn_shared_memory
-import time
 import array
 import numpy as np
 import struct
 import parameter_parser
 import math_utils as mu
+import matplotlib.cm as cm
+import time
+import os
+import datetime
+import glob
+from scipy.io import loadmat, savemat
 
 def parserLoop(queue):
-    sm = nn_shared_memory.NNSharedMemory(main=False)
+
     acq_params = parameter_parser.ParameterParser()
+    ml_length = len(np.where(acq_params.meas_list[:, 3] == 1)[0])
+    n_srcs = acq_params.probe['SD']['nSrcs'][0][0][0][0]
+    n_dets = acq_params.probe['SD']['nDets'][0][0][0][0]
+    sm = nn_shared_memory.NNSharedMemory(main=False, parser=True, ml_length=ml_length, n_srcs=n_srcs, n_dets=n_dets)
     queue.put(acq_params)
     raw_bytes_packet = np.array([], dtype=np.uint8)
     have_packet_length = False
+    tt = 0
+    previous_time = time.time()
 
-
+    # initialise variables
+    opt_power_level = []
+    dark_sig = []
+    src_module_groups = []
+    src_power_low_high = []
+    data_power = []
     while not sm.status_shm.buf[sm.STATUS_SHM_IDX['shutdown']]:
         if not sm.getStatus('power_calib'):
+            # current_time = time.time()
+            # elapsed_time = time.time() - previous_time
+            # previous_time = current_time
+            # print(f"Elapsed time before packet length: {elapsed_time:.4f} seconds")
             if sm.getStatus('raw_rbuf_wr_idx') != sm.getStatus('raw_rbuf_rd_idx'):
+
                 if not have_packet_length:
                     packet_length = get_packet_length(sm)
                     have_packet_length = True
                 # get raw data from n states
+                # current_time = time.time()
+                # elapsed_time = time.time() - previous_time
+                # previous_time = current_time
+                # print(f"Elapsed time: {elapsed_time:.4f} seconds")
                 si = sm.status_shm.buf[sm.STATUS_SHM_IDX['raw_rbuf_rd_idx']]%sm.RAW_RBUF_SLOTS * sm.RAW_RBUF_SLOT_SIZE
-                se = si + sm.RAW_RBUF_SLOT_SIZE
+                # se = si + sm.RAW_RBUF_SLOT_SIZE
+                se = si + packet_length
                 buf = array.array('B', sm.raw_rbuf.buf[si:se])
                 sm.status_shm.buf[sm.STATUS_SHM_IDX['raw_rbuf_rd_idx']] = (sm.status_shm.buf[sm.STATUS_SHM_IDX['raw_rbuf_rd_idx']] + 1) % sm.RAW_RBUF_SLOTS
                 raw_bytes = np.frombuffer(buf, dtype=np.uint8)
+                print('raw_bytes[1]=', raw_bytes[1])
                 if raw_bytes[1] == 0 and len(raw_bytes_packet) != 0:
                     # parse the data
-                    n_states = len(np.where(acq_params.srcram[0, :, 31] == 0)[0])
+                    # current_time = time.time()
+                    # elapsed_time = time.time()-previous_time
+                    # previous_time = current_time
+                    # print(f"Elapsed time: {elapsed_time:.4f} seconds")
+                    n_states = len(np.where(acq_params.srcram[0, :, 31] == 0)[0])+1
                     dt = n_states / 800
+                    tt = tt+dt
                     n_detb_active = struct.unpack("i", sm.SYS_STATUS.buf[:4])[0]
                     data_ml, data_dark, data_organized_by_state = bytes_to_timeseries(raw_bytes_packet, acq_params.srcram, acq_params.mapped_indices, acq_params.meas_list, n_detb_active, bool(sm.SYS_STATUS.buf[5]), bool(sm.SYS_STATUS.buf[4]), packet_length)
 
+                    current_time = time.time()
+                    elapsed_time = time.time()-previous_time
+                    previous_time = current_time
+                    print(f"Elapsed time after parsing datqa: {elapsed_time:.4f} seconds")
                     # example parse of aux
                     aux_val = float(sum([buf[5+ib]*256**ib for ib in range(3)]) * 3.3/(237)/4095)
                     si = sm.status_shm.buf[sm.STATUS_SHM_IDX['disp_rbuf_wr_idx']]
                     ml_idx = struct.unpack('H', sm.plot_ml_idx.buf[:2])[0]
                     sm.disp_rbuf[si] = float(data_ml[:,ml_idx][0])
+                    # print(float(data_ml[:,ml_idx][0]))
                     if np.isnan(sm.disp_rbuf_time[si-1]):
                         sm.disp_rbuf_time[si] = 0
                     else:
@@ -49,11 +86,41 @@ def parserLoop(queue):
                     raw_bytes_packet = raw_bytes[0:packet_length]
                 else:
                     raw_bytes_packet = np.append(raw_bytes_packet, raw_bytes[:packet_length])
+                    # current_time = time.time()
+                    # elapsed_time = time.time() - previous_time
+                    # previous_time = current_time
+                    # print(f"Elapsed time in else: {elapsed_time:.4f} seconds")
             else:
-                time.sleep(0.001)
+                time.sleep(0.0001)
+                if not sm.status_shm.buf[sm.STATUS_SHM_IDX['run']]:
+                    if sm.status_shm.buf[sm.STATUS_SHM_IDX['update_statemap_file']]:
+                        statemap_folder = os.path.join('..', 'meas', datetime.datetime.now().strftime('%y-%m-%d'))
+                        pattern = os.path.join(statemap_folder, '*_stateMap.mat')
+                        state_map_files = glob.glob(pattern)
+
+                        if state_map_files:
+                            # Find the latest file
+                            print('updating state map...........................')
+                            latest_file = max(state_map_files, key=os.path.getmtime)
+                            mat_data = loadmat(latest_file, struct_as_record=False, squeeze_me=True)
+                            devInfo = mat_data['devInfo']
+                            setattr(devInfo, 'dataLEDPowerCalibration', data_power)
+                            setattr(devInfo, 'optPowerLevel', opt_power_level)
+                            setattr(devInfo, 'srcPowerLowHigh', src_power_low_high)
+                            setattr(devInfo, 'dSig', dark_sig)
+                            setattr(devInfo, 'srcModuleGroups', src_module_groups)
+                            mat_data['stateIndices'] = acq_params.mapped_indices+1
+                            mat_data['devInfo'] = devInfo
+                            savemat(latest_file, mat_data)
+                            sm.status_shm.buf[sm.STATUS_SHM_IDX['update_statemap_file']] = False
+
         else:
             pow_range = 7
             shared_arr = np.ndarray((7, 1024, 32), dtype=np.uint16, buffer=sm.srcram.buf)
+            shared_arr_ml_sig = np.ndarray(ml_length, dtype=np.int16, buffer=sm.ml_sig_values.buf)
+            shared_arr_n_poor_srcs = np.ndarray(n_srcs, dtype=np.int16, buffer=sm.n_poor_srcs.buf)
+            shared_arr_n_poor_dets = np.ndarray(n_dets, dtype=np.int16, buffer=sm.n_poor_dets.buf)
+
             if not have_packet_length:
                 packet_length = get_packet_length(sm)
                 have_packet_length = True
@@ -61,9 +128,14 @@ def parserLoop(queue):
                 print('running for level ', iPower)
                 sm.power_calib_level.buf[:2] = struct.pack('H', iPower)
                 acq_params.srcram = acq_params.create_srcram(acq_params.meas_list, iPower)
+                acq_params.mapped_indices = acq_params.map_to_measurementlist(acq_params.srcram, acq_params.meas_list)
                 np.copyto(shared_arr, acq_params.srcram)
+                n_states = len(np.where(acq_params.srcram[0, :, 31] == 0)[0])+1
+                print('running for level before start running', iPower)
                 sm.status_shm.buf[sm.STATUS_SHM_IDX['run']] = True
-                raw_bytes_packet = get_n_frames(sm, acq_params, packet_length, 4)
+                raw_bytes_temp = get_n_frames(sm, acq_params, packet_length, n_states, 1)
+                raw_bytes_packet = get_n_frames(sm, acq_params, packet_length, n_states, 4)
+                print('raw_bytes_packet', raw_bytes_packet[0], raw_bytes_packet[1])
                 sm.status_shm.buf[sm.STATUS_SHM_IDX['run']] = False
                 n_detb_active = struct.unpack("i", sm.SYS_STATUS.buf[:4])[0]
                 data_ml, data_dark_temp, data_organized_by_state = bytes_to_timeseries(raw_bytes_packet, acq_params.srcram,
@@ -82,9 +154,18 @@ def parserLoop(queue):
                     data_states_power = np.zeros((data_organized_by_state.shape[1], data_organized_by_state.shape[2], pow_range))
                     data_power = np.zeros((data_dark_temp.shape[1], pow_range))
 
+            print('Data power...')
+            print(data_power.shape)
+            print(data_power)
             print('plotting results now................')
-            thresholds = [-45.7625, -1.9]
-            srcram, opt_power_level, dark_sig, src_module_groups, src_power_low_high = power_calibration_dual_levels(acq_params.meas_list, acq_params.probe['SD']['nSrcs'][0][0][0][0], data_power, thresholds, 0)
+            thresholds = [-45.7625, -2.2407]
+            threshHigh = 10 ** (thresholds[1] / 20)
+            threshLow = 10 ** (thresholds[0] / 20)
+            n_srcs = acq_params.probe['SD']['nSrcs'][0][0][0][0]
+            n_dets = acq_params.probe['SD']['nDets'][0][0][0][0]
+            print('n_srcs', n_srcs)
+            print('n_dets', n_dets)
+            srcram, opt_power_level, dark_sig, src_module_groups, src_power_low_high = power_calibration_dual_levels(acq_params.meas_list, n_srcs, data_power, thresholds, 1)
 
             acq_params.srcram = srcram
             np.copyto(shared_arr, acq_params.srcram)
@@ -96,12 +177,25 @@ def parserLoop(queue):
             lst2 = np.where(acq_params.meas_list[:, 3] == 2)[0]
 
             sm.status_shm.buf[sm.STATUS_SHM_IDX['power_calib']] = False
+            sm.status_shm.buf[sm.STATUS_SHM_IDX['sig_level_tuning']] = True
             print('running signal level adjustment')
             sm.status_shm.buf[sm.STATUS_SHM_IDX['run']] = True
+            ml_sig_values = np.ones(len(lst1), dtype=np.int16)
+            jet_colormap = cm.get_cmap('jet', 80)
+            cm_lookup_table = (jet_colormap(np.linspace(0, 1, 80))[:, :3] * 255).astype(np.uint8)
+            n_states = len(np.where(acq_params.srcram[0, :, 31] == 0)[0])+1
+            print('n_states', n_states)
             while True:
+                if sm.getStatus('raw_rbuf_wr_idx') != sm.getStatus('raw_rbuf_rd_idx'):
+                    print('inside signal level adjustment')
                 if not sm.status_shm.buf[sm.STATUS_SHM_IDX['run']]:
                     break
-                raw_bytes_packet = get_n_frames(sm, acq_params, packet_length, 2)
+                si = sm.status_shm.buf[sm.STATUS_SHM_IDX['raw_rbuf_rd_idx']] % sm.RAW_RBUF_SLOTS * sm.RAW_RBUF_SLOT_SIZE
+                se = si + sm.RAW_RBUF_SLOT_SIZE
+                sm.status_shm.buf[sm.STATUS_SHM_IDX['raw_rbuf_rd_idx']] = (sm.status_shm.buf[sm.STATUS_SHM_IDX[
+                    'raw_rbuf_rd_idx']] + 1) % sm.RAW_RBUF_SLOTS
+                raw_bytes_packet_temp = get_n_frames(sm, acq_params, packet_length, n_states, 1)
+                raw_bytes_packet = get_n_frames(sm, acq_params, packet_length,n_states, 2)
                 data_ml, data_dark_temp, data_organized_by_state = bytes_to_timeseries(raw_bytes_packet, acq_params.srcram,
                                                                                        acq_params.mapped_indices,
                                                                                        acq_params.meas_list, n_detb_active,
@@ -112,21 +206,37 @@ def parserLoop(queue):
                 data_sig = np.nanmean(data_ml, axis=0)
 
                 # Plot saturated and poor SNR channels
-                lsth = np.where((data_sig[lst1 - 1] > thresholds[1]) | (data_sig[lst2 - 1] > thresholds[1]))[0]
-                lstl = np.where((data_sig[lst1 - 1] < thresholds[0]) | (data_sig[lst2 - 1] < thresholds[0]))[0]
+                lsth = np.where((data_sig[lst1] > threshHigh) | (data_sig[lst2] > threshHigh))[0]
+                lstl = np.where((data_sig[lst1] < threshLow) | (data_sig[lst2] < threshLow))[0]
 
-                lsth1 = np.where(data_sig[lst1 - 1] > thresholds[1])[0]
-                lstl1 = np.where(data_sig[lst1 - 1] < thresholds[0])[0]
+                lsth1 = np.where(data_sig[lst1] > threshHigh)[0]
+                lstl1 = np.where(data_sig[lst1] < threshLow)[0]
 
-                lsth2 = np.where(data_sig[lst2 - 1] > thresholds[1])[0]
-                lstl2 = np.where(data_sig[lst2 - 1] < thresholds[0])[0]
+                lsth2 = np.where(data_sig[lst2] > threshHigh)[0]
+                lstl2 = np.where(data_sig[lst2] < threshLow)[0]
 
-                print('higher than threshold = ', len(lsth))
-                print('lower than threshold = ', len(lsth))
+                ml_idx_sat = lst1[lsth]
+                ml_sig_values = np.ones(len(lst1), dtype=np.int16)
+                ml_sig_values[ml_idx_sat] = 2
+                n_poor_srcs = np.zeros(n_srcs, dtype=np.int16)
+                n_poor_dets = np.zeros(n_dets, dtype=np.int16)
 
-                time.sleep(0.002)
+                lst_tmp1 = lst1[lstl]
+                lst_tmp2 = lst2[lstl]
 
-        time.sleep(0.02)
+                for i_ml in range(len(lstl)):
+                    n_poor_srcs[int(acq_params.meas_list[lst_tmp1[i_ml],0])-1] += 1
+                    n_poor_dets[int(acq_params.meas_list[lst_tmp1[i_ml],1])-1] += 1
+                    i_col = int(np.ceil((20 * np.log10(max(min(min(data_sig[lst_tmp1[i_ml]], data_sig[lst_tmp2[i_ml]]), 1e-2), 1e-4)) + 81) * cm_lookup_table.shape[0] / 41))
+                    ml_sig_values[lstl[i_ml]] = -i_col
+                # print('ml_sig_values = ', ml_sig_values)
+
+                np.copyto(shared_arr_ml_sig, ml_sig_values)
+                np.copyto(shared_arr_n_poor_srcs, n_poor_srcs)
+                np.copyto(shared_arr_n_poor_dets, n_poor_dets)
+                sm.status_shm.buf[sm.STATUS_SHM_IDX['disp_rbuf_wr_idx']] = (sm.status_shm.buf[sm.STATUS_SHM_IDX[
+                    'disp_rbuf_wr_idx']] + 1) % sm.DISP_RBUF_SIZE
+                time.sleep(0.0001)
 
     # clean up when shutting down
     sm.close()
@@ -160,9 +270,13 @@ def get_packet_length(sm):
     packet_length = offset + payload_size + acc_bytes
     return packet_length
 
-def get_n_frames(sm, acq_params, packet_length, n):
-    raw_bytes_packet = np.array([], dtype=np.uint8)
+def get_n_frames(sm, acq_params, packet_length, n_states, n):
+    # raw_bytes_packet = np.array([], dtype=np.uint8)
+    raw_bytes_packet = np.zeros(packet_length * n_states, dtype=np.uint8)
+    print('raw_bytes_packet_shape',raw_bytes_packet.shape)
     frame_counter = 0
+    print('beginning get n_frames')
+    previous_time = time.time()
     while True:
         if sm.getStatus('raw_rbuf_wr_idx') != sm.getStatus('raw_rbuf_rd_idx'):
             # get raw data from n states
@@ -172,17 +286,25 @@ def get_n_frames(sm, acq_params, packet_length, n):
             sm.status_shm.buf[sm.STATUS_SHM_IDX['raw_rbuf_rd_idx']] = (sm.status_shm.buf[sm.STATUS_SHM_IDX[
                 'raw_rbuf_rd_idx']] + 1) % sm.RAW_RBUF_SLOTS
             raw_bytes = np.frombuffer(buf, dtype=np.uint8)
-            if raw_bytes[1] == 0 and len(raw_bytes_packet) != 0:
+
+            if raw_bytes[1] == n_states-1 and np.any(raw_bytes_packet != 0): #len(raw_bytes_packet) != 0:
+                raw_bytes_packet[raw_bytes[1]*packet_length:(raw_bytes[1]+1)*packet_length] = raw_bytes[:packet_length]
                 frame_counter += 1
                 if frame_counter >= n:
                     break
             else:
-                raw_bytes_packet = np.append(raw_bytes_packet, raw_bytes[:packet_length])
+                # raw_bytes_packet = np.append(raw_bytes_packet, raw_bytes[:packet_length])
+                print('current byte index and length', raw_bytes[1]*packet_length, (raw_bytes[1]+1)*packet_length)
+                raw_bytes_packet[raw_bytes[1]*packet_length:(raw_bytes[1]+1)*packet_length] = raw_bytes[:packet_length]
+                previous_time, elapsed_time = get_lapsed_time(previous_time)
+                print(f"Elapsed time in get n frames: {elapsed_time:.4f} seconds")
+                print('raw bytes[1] and n_states:', raw_bytes[1], n_states)
         else:
-            time.sleep(0.001)
+            time.sleep(0.0001)
         if not sm.status_shm.buf[sm.STATUS_SHM_IDX['run']]:
             break
 
+    print('end get n_frames')
     return raw_bytes_packet
 
 def power_calibration_dual_levels(ml, nSrcs, dataLEDPowerCalibration, thresholds, flagSpatialMultiplex):
@@ -388,7 +510,7 @@ def bytes_to_timeseries(raw_bytes, srcram, mapped_indices, meas_list, n_det_boar
 
     det_data = (det_data > pow(2, 23 - 1)) * pow(2, 24) - det_data
 
-    n_states = len(np.where(srcram[0,:,31]==0)[0])
+    n_states = len(np.where(srcram[0,:,31]==0)[0])+1
     n_frames = int(np.ceil(det_data.shape[1] / n_states))
     data_organized_by_state = np.full((n_states * n_frames, n_det_per_board * n_det_boards), np.nan)
     # indices = list(range(int(raw_bytes[1]), int(raw_bytes[1]) + det_data.shape[1]))
@@ -407,6 +529,11 @@ def bytes_to_timeseries(raw_bytes, srcram, mapped_indices, meas_list, n_det_boar
     data_ml[data_ml < 0] = 1e-6
 
     return data_ml, data_dark, data_organized_by_state
+
+def get_lapsed_time(previous_time):
+    current_time = time.time()
+    elapsed_time = time.time() - previous_time
+    return current_time, elapsed_time
 
 
 

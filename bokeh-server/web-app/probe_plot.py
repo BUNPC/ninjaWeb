@@ -1,6 +1,7 @@
 import os
 import configparser
 from scipy import io
+import numpy as np
 from bokeh.plotting import figure
 from bokeh.models import GraphRenderer, Circle,  StaticLayoutProvider, MultiLine, NodesAndLinkedEdges, EdgesOnly
 
@@ -21,6 +22,7 @@ def gen_probe_plot():
     src_pos = sd_data['SD']['SrcPos2D'][0][0]
     det_pos = sd_data['SD']['DetPos2D'][0][0]
     ml = sd_data['SD']['MeasList'][0][0]
+    ml_length = len(np.where(ml[:, 3] == 1)[0])
     n_src = len(src_pos)
     n_det = len(det_pos)
 
@@ -77,4 +79,4 @@ def gen_probe_plot():
     # render the graph
     plot.renderers.append(graph)
 
-    return plot, graph
+    return plot, graph, ml_length, sd_data

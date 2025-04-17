@@ -14,6 +14,7 @@ def getFileNames(is_calib = False, calib_level = 0):
         filename = 'ninjaWeb_'+datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         filename_bin = os.path.join(data_dir,filename+'.bin')
         filename_log = os.path.join(data_dir, filename + '.log')
+        filename_json = os.path.join(data_dir, filename+'_stateMap.mat')
     else:
         calib_folder = os.path.join(data_dir, 'LEDPowerCalibration')
         if not os.path.exists(calib_folder):
@@ -21,6 +22,7 @@ def getFileNames(is_calib = False, calib_level = 0):
         filename = f'LEDPowerCalibration_{calib_level:02d}_' + datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         filename_bin = os.path.join(calib_folder, filename + '.bin')
         filename_log = os.path.join(calib_folder, filename + '.log')
+        filename_json = os.path.join(data_dir, filename + '_stateMap.mat')
 
     # counter_file = SAVE_FOLD + "file_counter.txt"
     # if os.path.exists(counter_file):
@@ -43,7 +45,7 @@ def getFileNames(is_calib = False, calib_level = 0):
     # fname_bin = SAVE_FOLD + fname_root + ".bin"
     # fname_log = SAVE_FOLD + fname_root + ".log"
 
-    return filename_bin, filename_log
+    return filename_bin, filename_log, filename_json
 
 
 

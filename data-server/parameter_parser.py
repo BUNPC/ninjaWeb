@@ -142,9 +142,9 @@ class ParameterParser:
             # if some sources are never turned on but are required by the
             # measurement list, those states will be marked as nan
             foo = (srcID - 1) % 8 * 2 + (lambdaID - 1)
-            # bits = mu.bitget(foo, range(0,5))
-            # Lia = np.all(sourceIDs == bits, axis=1)
-            Lia = mu.ismember(sourceIDs, mu.bitget(foo, list(range(0, 5))), 'rows')
+            bits = mu.bitget(foo, range(0,5))
+            Lia = np.all(sourceIDs == bits, axis=1)
+            # Lia = mu.ismember(sourceIDs, mu.bitget(foo, list(range(0, 5))), 'rows')
             lst = np.where(Lia)[0]
 
             if len(lst) == 1:
