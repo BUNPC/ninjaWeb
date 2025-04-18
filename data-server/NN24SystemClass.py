@@ -8,6 +8,8 @@
 
 import time
 import configparser
+from time import sleep
+
 import numpy as np
 from math import ceil, floor
 import spidev
@@ -542,7 +544,7 @@ class NNSystem():
                     err_cnt += 1
             
             if err_cnt > 0:
-                print('Error: {:d} RAM readback errors\n'.format(err_cnt))
+                print('Error: {:d} RAM {:s} readback errors\n'.format(err_cnt, ram_select))
 
         if data_relay:
             # restore RAM B
@@ -561,10 +563,12 @@ class NNSystem():
         self.run = False
         self.updateStatReg()
         self.flush()
+        time.sleep(0.3)
+        self.flush()
 
 
     # ----------------------------------------------------------------------
-    def updateSrcRAM(self, srcram):
+    def updateSrcRAM(self, srcram, skipreadback=False):
         if srcram is None:
             srcram = np.zeros([7, 1024, 32], dtype=np.uint8)
             srcram[:,:,[20, 31]] = 1 # disable LEDs and set all stop bits
@@ -576,14 +580,20 @@ class NNSystem():
         self.rama[self.n_states_a:, 8] = 1 
         for isrcb in range(self.N_SRC_SLOTS):
             if self.srcb_active[isrcb]:
-                self.uploadToRAM('src', False, isrcb)
-        self.uploadToRAM('a')
+                self.uploadToRAM('src', skipreadback, isrcb)
+        self.uploadToRAM('a', skipreadback)
 
 
     # ----------------------------------------------------------------------
     def flush(self):
         # Simple flush of data in SPI buffer
-        # (might not get all data if a lot is in the external buffer)
+        self.rst_tx_fifo = True
+        self.run = False
+        self.updateStatReg(True)
+        time.sleep(0.05)
+        self.rst_tx_fifo = False
+        self.updateStatReg(True)
+
         buf = self.spi.readbytes(2)
         bytes_available = buf[0] + 256*buf[1]
         

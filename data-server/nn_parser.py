@@ -55,7 +55,7 @@ def parserLoop(queue):
                 buf = array.array('B', sm.raw_rbuf.buf[si:se])
                 sm.status_shm.buf[sm.STATUS_SHM_IDX['raw_rbuf_rd_idx']] = (sm.status_shm.buf[sm.STATUS_SHM_IDX['raw_rbuf_rd_idx']] + 1) % sm.RAW_RBUF_SLOTS
                 raw_bytes = np.frombuffer(buf, dtype=np.uint8)
-                print('raw_bytes[1]=', raw_bytes[1])
+                # print('raw_bytes[1]=', raw_bytes[1])
                 if raw_bytes[1] == 0 and len(raw_bytes_packet) != 0:
                     # parse the data
                     # current_time = time.time()
@@ -71,7 +71,7 @@ def parserLoop(queue):
                     current_time = time.time()
                     elapsed_time = time.time()-previous_time
                     previous_time = current_time
-                    print(f"Elapsed time after parsing datqa: {elapsed_time:.4f} seconds")
+                    print(f"Elapsed time after parsing data: {elapsed_time:.4f} seconds")
                     # example parse of aux
                     aux_val = float(sum([buf[5+ib]*256**ib for ib in range(3)]) * 3.3/(237)/4095)
                     si = sm.status_shm.buf[sm.STATUS_SHM_IDX['disp_rbuf_wr_idx']]
@@ -109,7 +109,7 @@ def parserLoop(queue):
                             setattr(devInfo, 'srcPowerLowHigh', src_power_low_high)
                             setattr(devInfo, 'dSig', dark_sig)
                             setattr(devInfo, 'srcModuleGroups', src_module_groups)
-                            mat_data['stateIndices'] = acq_params.mapped_indices+1
+                            mat_data['stateIndices'] = acq_params.mapped_indices+np.array([1,1,2])
                             mat_data['devInfo'] = devInfo
                             savemat(latest_file, mat_data)
                             sm.status_shm.buf[sm.STATUS_SHM_IDX['update_statemap_file']] = False
@@ -167,6 +167,7 @@ def parserLoop(queue):
             print('n_dets', n_dets)
             srcram, opt_power_level, dark_sig, src_module_groups, src_power_low_high = power_calibration_dual_levels(acq_params.meas_list, n_srcs, data_power, thresholds, 1)
 
+            time.sleep(5)
             acq_params.srcram = srcram
             np.copyto(shared_arr, acq_params.srcram)
             acq_params.mapped_indices = acq_params.map_to_measurementlist(acq_params.srcram,acq_params.meas_list, src_power_low_high)
@@ -185,6 +186,7 @@ def parserLoop(queue):
             cm_lookup_table = (jet_colormap(np.linspace(0, 1, 80))[:, :3] * 255).astype(np.uint8)
             n_states = len(np.where(acq_params.srcram[0, :, 31] == 0)[0])+1
             print('n_states', n_states)
+            time.sleep(0.5)
             while True:
                 if sm.getStatus('raw_rbuf_wr_idx') != sm.getStatus('raw_rbuf_rd_idx'):
                     print('inside signal level adjustment')
@@ -309,18 +311,20 @@ def get_n_frames(sm, acq_params, packet_length, n_states, n):
 
 def power_calibration_dual_levels(ml, nSrcs, dataLEDPowerCalibration, thresholds, flagSpatialMultiplex):
     rhoSDS = ml[:, 4]
+
     # rhoSDS = np.zeros((ml.shape[0],))
     # for iML in range(ml.shape[0]):
     #     iS = int(ml[iML, 0]) - 1
     #     iD = int(ml[iML, 1]) - 1
     #     rhoSDS[iML] = np.sqrt(np.sum((SD.SrcPos3D[iS, :] - SD.DetPos3D[iD, :]) ** 2))
-    if flagSpatialMultiplex and nSrcs == 56:
-        srcModuleGroups = [[1, 3, 5], [2, 4, 6], [7]]
+    # if flagSpatialMultiplex and nSrcs == 56:
+    #     srcModuleGroups = [[1, 3, 5], [2, 4, 6], [7]]
+    #
+    # else:
+    #     srcModuleGroups = [[1], [2], [3], [4], [5], [6], [7]]
+    #     srcModuleGroups = srcModuleGroups[0:int(np.ceil((nSrcs - 0.1) / 8))]
 
-    else:
-        srcModuleGroups = [[1], [2], [3], [4], [5], [6], [7]]
-        srcModuleGroups = srcModuleGroups[0:int(np.ceil((nSrcs - 0.1) / 8))]
-
+    srcModuleGroups = [[1], [2], [3], [4], [5], [6], [7]]
     srcModuleGroups_length = len(srcModuleGroups)
 
     lstSMS = [[{} for _ in range(2)] for _ in range(8)]
@@ -332,7 +336,7 @@ def power_calibration_dual_levels(ml, nSrcs, dataLEDPowerCalibration, thresholds
                 for iMod in srcModuleGroups[iSg]:
                     lst = np.where(
                         (ml[:, 0] == ((iMod - 1) * 8 + iSrc + 1)) & (ml[:, 3] == iWav + 1) & (rhoSDS >= 0) & (
-                                    rhoSDS <= 45))[0]
+                                rhoSDS <= 45))[0]
                     lstSMS[iSrc][iWav][iSg] = np.append(lstSMS[iSrc][iWav][iSg], lst)
 
     threshHigh = 10 ** (thresholds[1] / 20)
@@ -358,14 +362,14 @@ def power_calibration_dual_levels(ml, nSrcs, dataLEDPowerCalibration, thresholds
                                             (dataLEDPowerCalibration[lst, iPow2] < threshHigh))[0]
                         numDetGood2[iSrc, iPow1, iPow2, iWav] = len(lstGood2)
 
-                ir, ic = np.where(numDetGood12[iSrc, :, :, iWav] == np.max(numDetGood12[iSrc, :, :, iWav]))
-                ir2, ic2 = np.where((numDetGood12[iSrc, :, :, iWav] == np.max(numDetGood12[iSrc, :, :, iWav])) &
-                                    (numDetGood2[iSrc, :, :, iWav] > 0))
+                ic, ir = np.where(numDetGood12[iSrc, :, :, iWav].T == np.max(numDetGood12[iSrc, :, :, iWav]))
+                ic2, ir2 = np.where((numDetGood12[iSrc, :, :, iWav].T == np.max(numDetGood12[iSrc, :, :, iWav])) &
+                                    (numDetGood2[iSrc, :, :, iWav].T > 0))
 
                 if True:
-                    if not ir2.any():
-                        optPowerLevel[iSrc, 0, iWav, iSg] = ir[-1]
-                        optPowerLevel[iSrc, 1, iWav, iSg] = ic[-1]
+                    if True:  # not ir2.any():
+                        optPowerLevel[iSrc, 0, iWav, iSg] = ir[0]  # [-1]
+                        optPowerLevel[iSrc, 1, iWav, iSg] = ic[0]  # [-1]
                     else:
                         # require 1 or more channels to use the high power
                         optPowerLevel[iSrc, 0, iWav, iSg] = ir2[-1]
@@ -376,15 +380,16 @@ def power_calibration_dual_levels(ml, nSrcs, dataLEDPowerCalibration, thresholds
 
     # Initialize dSig and srcPowerLowHigh
     dSig = np.zeros(len(ml))
-    srcPowerLowHigh = np.zeros((8 * 7, len(ml), 2))
-    maxPower = np.round(np.logspace(2, np.log10(2 ** 16 - 1), 7)).astype(int)
+    nDets = max(ml[:, 1])
+    srcPowerLowHigh = np.zeros((8 * 7, int(nDets), 2))
+    maxPower = np.round(np.logspace(3, np.log10(2 ** 16 - 1), 7)).astype(int)
 
     for iML in range(len(ml)):
         iS = int((ml[iML, 0] - 1) % 8)
         iD = int(ml[iML, 1] - 1)
         iW = int(ml[iML, 3] - 1)
 
-        iSrcModule = (ml[iML, 0] - 1) // 8
+        iSrcModule = np.ceil(ml[iML, 0] / 8)
         # iSg = next((ii for ii, src in enumerate(srcModuleGroups) if (iSrcModule + 1) in src), -1)
 
         iSg = 0
@@ -416,29 +421,39 @@ def power_calibration_dual_levels(ml, nSrcs, dataLEDPowerCalibration, thresholds
     nSrcModules = 7
     iState = 0
 
+    srcModuleGroups = [[1, 2, 3, 4, 5, 6, 7]]
+    srcModuleGroups_length = len(srcModuleGroups)
     for iSg in range(srcModuleGroups_length):
-        for iS in range(1, 9):  # Equivalent to 1:8 in MATLAB
+        for iS in range(1, 9):
             lstSMG = srcModuleGroups[iSg]
 
             for iSrcMod in range(len(lstSMG)):
                 srcram[lstSMG[iSrcMod] - 1, iState, 0:16] = mu.bitget(
-                    maxPower[int(optPowerLevel[iS - 1, 0, 0, iSg])], range(0, 16))  # Set the power
+                    maxPower[int(optPowerLevel[iS - 1, 0, 0, lstSMG[iSrcMod] - 1])], range(0, 16))  # Set the power
                 srcram[lstSMG[iSrcMod] - 1, iState, 16:20] = mu.bitget(((iS - 1) * 2), range(0,
-                                                                                                  4))  # Select the source for wavelength 1
+                                                                                             4))  # Select the source for wavelength 1
                 srcram[lstSMG[iSrcMod] - 1, iState, 20] = 0
                 srcram[lstSMG[iSrcMod] - 1, iState, 30] = 0
 
             iState += 1
             for iSrcMod in range(len(lstSMG)):
                 srcram[lstSMG[iSrcMod] - 1, iState, 0:16] = mu.bitget(
-                    maxPower[int(optPowerLevel[iS - 1, 0, 1, iSg])], range(0, 16))  # Set the power
+                    maxPower[int(optPowerLevel[iS - 1, 0, 1, lstSMG[iSrcMod] - 1])], range(0, 16))  # Set the power
                 srcram[lstSMG[iSrcMod] - 1, iState, 16:20] = mu.bitget(((iS - 1) * 2 + 1), range(0, 4))
                 srcram[lstSMG[iSrcMod] - 1, iState, 20] = 0
                 srcram[lstSMG[iSrcMod] - 1, iState, 30] = 0
 
-            iState += 2
+            iState += 1
 
     iState += 1
+
+    if flagSpatialMultiplex and nSrcs == 56:
+        srcModuleGroups = [[1, 3, 5], [2, 4, 6], [7]]
+    else:
+        srcModuleGroups = [[1], [2], [3], [4], [5], [6], [7]]
+        srcModuleGroups = srcModuleGroups[0:int(np.ceil((nSrcs - 0.1) / 8))]
+
+    srcModuleGroups_length = len(srcModuleGroups)
 
     for iSg in range(srcModuleGroups_length):
         for iS in range(1, 9):  # Equivalent to 1:8 in MATLAB
@@ -446,22 +461,24 @@ def power_calibration_dual_levels(ml, nSrcs, dataLEDPowerCalibration, thresholds
 
             for iSrcMod in range(len(lstSMG)):
                 srcram[lstSMG[iSrcMod] - 1, iState, 0:16] = mu.bitget(
-                    maxPower[int(optPowerLevel[iS - 1, 1, 0, iSg])], range(0, 16))  # Set the power
+                    maxPower[int(optPowerLevel[iS - 1, 1, 0, lstSMG[iSrcMod] - 1])], range(0, 16))  # Set the power
                 srcram[lstSMG[iSrcMod] - 1, iState, 16:20] = mu.bitget(((iS - 1) * 2), range(0,
-                                                                                                  4))  # Select the source for wavelength 1
+                                                                                             4))  # Select the source for wavelength 1
                 srcram[lstSMG[iSrcMod] - 1, iState, 20] = 0
                 srcram[lstSMG[iSrcMod] - 1, iState, 30] = 0
 
             iState += 1
             for iSrcMod in range(len(lstSMG)):
                 srcram[lstSMG[iSrcMod] - 1, iState, 0:16] = mu.bitget(
-                    maxPower[int(optPowerLevel[iS - 1, 1, 1, iSg])], range(0, 16))  # Set the power
+                    maxPower[int(optPowerLevel[iS - 1, 1, 1, lstSMG[iSrcMod] - 1])], range(0, 16))  # Set the power
                 srcram[lstSMG[iSrcMod] - 1, iState, 16:20] = mu.bitget(((iS - 1) * 2 + 1), range(0, 4))
                 srcram[lstSMG[iSrcMod] - 1, iState, 20] = 0
                 srcram[lstSMG[iSrcMod] - 1, iState, 30] = 0
 
             iState += 2
     srcram[:, iState - 1:, 31] = 1  # mark sequence end
+
+    print('src ram states after dual power calibration:.....', iState)
 
     return srcram, optPowerLevel, dSig, srcModuleGroups, srcPowerLowHigh
 

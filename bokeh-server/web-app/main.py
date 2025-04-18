@@ -30,7 +30,7 @@ print("\n-----  NinjaNIRS 2024 byte bokeh server -- using NN24SystemClass -----\
 
 # create a plot and style its properties
 source = ColumnDataSource(data=dict(x=[0], y=[0]))
-p = figure(width=1000, height=400,  y_range=(0, 3))
+p = figure(width=1000, height=400,  y_range=(0, 1))
 p.xaxis.axis_label = "Time [s]"
 p.yaxis.axis_label = "Voltage [V]"
 
@@ -181,7 +181,7 @@ def update_power_calib_plot_safe(plot, edge_data_source, ml_sig_values, n_poor_s
         else:
             # Handle other cases if needed, for now, show with default
             new_alpha.append(1)
-            new_line_color.append("blue")
+            new_line_color.append("green")
 
     edge_data_source.data = dict(alpha=new_alpha, line_color=new_line_color, start=edge_data_source.data['start'], end=edge_data_source.data['end'])
     # print(f"edge_data_source.data after update: {edge_data_source.data}")  # Debugging print

@@ -143,7 +143,7 @@ def recorderLoop(acq_params):
                 shared_arr_loaded = np.ndarray((7, 1024, 32), dtype=np.uint16, buffer=sm.srcram.buf)
                 acq_params.srcram = np.copy(shared_arr_loaded)
                 print('power calib - before updating source ram')
-                nn.updateSrcRAM(acq_params.srcram)
+                nn.updateSrcRAM(acq_params.srcram, False)
                 print('srcram updated')
                 nn.flush() # test to see if that fixes the issue
             nn.startAcq()
