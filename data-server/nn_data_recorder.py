@@ -143,7 +143,7 @@ def recorderLoop(acq_params):
                 shared_arr_loaded = np.ndarray((7, 1024, 32), dtype=np.uint16, buffer=sm.srcram.buf)
                 acq_params.srcram = np.copy(shared_arr_loaded)
                 print('power calib - before updating source ram')
-                nn.updateSrcRAM(acq_params.srcram, False)
+                nn.updateSrcRAM(acq_params.srcram, True)
                 print('srcram updated')
                 nn.flush() # test to see if that fixes the issue
             nn.startAcq()
@@ -206,9 +206,9 @@ def get_json_struct():
 def update_json_sidecar(json_sidecar, acq_params, nn):
     json_sidecar['nSD'] = acq_params.probe['SD']
     json_sidecar['stateMap'] = acq_params.srcram
-    json_sidecar['devInfo']['acc_active'] = nn.acc_active
-    json_sidecar['devInfo']['aux_active'] = nn.aux_active
-    json_sidecar['devInfo']['N_DETECTOR_BOARDS'] = nn.n_detb_active
+    json_sidecar['devInfo']['acc_active'] = float(nn.acc_active)
+    json_sidecar['devInfo']['aux_active'] = float(nn.aux_active)
+    json_sidecar['devInfo']['N_DETECTOR_BOARDS'] = float(nn.n_detb_active)
     json_sidecar['devInfo']['stat']['n_smp'] = float(nn.n_smp)
     return json_sidecar
     

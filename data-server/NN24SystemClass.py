@@ -468,88 +468,88 @@ class NNSystem():
 
 
     # ----------------------------------------------------------------------
-    def uploadToRAM(self, ram_select, skipreadback=False, brd_sel=0):
-        # Uploads selected ram variable to FPGA
-        
-        if ram_select == 'a':
-            addr_offset = 16
-            data_relay = False
-            ram_rb_header = 240
-            d = self.rama                       # create alias
-        elif ram_select == 'b':
-            addr_offset = 32
-            data_relay = False
-            ram_rb_header = 240
-            d = self.ramb
-        elif ram_select == 'src':
-            addr_offset = self.BRD_RELAY_OFFSET
-            data_relay = True
-            ram_rb_header = 255
-            ramb_old = self.ramb.copy()
-            self.ramb = genSingleSourceRAMB(brd_sel+32, True)
-            self.uploadToRAM('b', True)
-            d = self.srcram[brd_sel, :, :]
-        else:
-            print("ram_select invalid\n")
-            return
-        
-        self.flush()
-        # flush FSM in FPGA
-        self.writeBytes([0]*8)
-
-        buf = np.zeros(1024*(1+2+4), dtype=np.uint8)
-
-        for irow in range(1024):
-            offset = irow*(1+2+4)
-            buf[offset] = 255                                       # command header
-            buf[offset+1] = irow % 256                              # address low byte
-            buf[offset+2] = 128 + addr_offset + (irow >> 8)         # address high byte
-            # convert the 32 individual bits of each row to 4 bytes
-            buf[offset+3:offset+3+4] = np.packbits(d[irow,:], bitorder='little') 
-
-        # split writes into chunks of less than SPI bufsiz 
-        # (/sys/module/spidev/parameters/bufsiz ~= 4096 on this machine)
-        # split needs to be at command boundary
-        for icnk in range(8):
-            self.writeBytes(buf[icnk*128*7:(icnk+1)*128*7])
-            if data_relay: # slow down transmission since UART to boards is not so fast
-                time.sleep(0.03)
-
-        if not skipreadback:
-            err_cnt = 0
-            time.sleep(0.1)
-            self.flush()
-
-            rbcmd_buf = np.zeros(1024*(1+2+4), dtype=np.uint8)
-            for irow in range(1024):
-                offset = irow*(1+2+4)
-                rbcmd_buf[offset] = 255                                 # command header
-                rbcmd_buf[offset+1] = irow % 256                        # address low byte
-                rbcmd_buf[offset+2] = addr_offset + (irow >> 8)         # address high byte
-                rbcmd_buf[(offset+3):(offset+7)] = 0                    # (value bytes)
-            for icnk in range(8):
-                self.writeBytes(rbcmd_buf[icnk*128*7:(icnk+1)*128*7])
-                if data_relay: # slow down transmission since UART to boards is not so fast
-                    time.sleep(0.05)
-
-            nb = self.readBytes(1024*7)
-            if nb != (1024*7):
-                print('Error: RAM readback not enough bytes received\n')
-            for irow in range(1024):
-                offset = irow*(1+2+4)
-                if self.rxtx_buf[offset] != ram_rb_header or \
-                    self.rxtx_buf[offset+1] != buf[offset+1] or\
-                    self.rxtx_buf[offset+2] != buf[offset+2]-128 or\
-                    not all(self.rxtx_buf[offset+3:offset+7] == buf[offset+3:offset+7]):
-                    err_cnt += 1
-            
-            if err_cnt > 0:
-                print('Error: {:d} RAM {:s} readback errors\n'.format(err_cnt, ram_select))
-
-        if data_relay:
-            # restore RAM B
-            self.ramb = ramb_old
-            self.uploadToRAM('b', False)
+    # def uploadToRAM(self, ram_select, skipreadback=False, brd_sel=0):
+    #     # Uploads selected ram variable to FPGA
+    #
+    #     if ram_select == 'a':
+    #         addr_offset = 16
+    #         data_relay = False
+    #         ram_rb_header = 240
+    #         d = self.rama                       # create alias
+    #     elif ram_select == 'b':
+    #         addr_offset = 32
+    #         data_relay = False
+    #         ram_rb_header = 240
+    #         d = self.ramb
+    #     elif ram_select == 'src':
+    #         addr_offset = self.BRD_RELAY_OFFSET
+    #         data_relay = True
+    #         ram_rb_header = 255
+    #         ramb_old = self.ramb.copy()
+    #         self.ramb = genSingleSourceRAMB(brd_sel+32, True)
+    #         self.uploadToRAM('b', True)
+    #         d = self.srcram[brd_sel, :, :]
+    #     else:
+    #         print("ram_select invalid\n")
+    #         return
+    #
+    #     self.flush()
+    #     # flush FSM in FPGA
+    #     self.writeBytes([0]*8)
+    #
+    #     buf = np.zeros(1024*(1+2+4), dtype=np.uint8)
+    #
+    #     for irow in range(1024):
+    #         offset = irow*(1+2+4)
+    #         buf[offset] = 255                                       # command header
+    #         buf[offset+1] = irow % 256                              # address low byte
+    #         buf[offset+2] = 128 + addr_offset + (irow >> 8)         # address high byte
+    #         # convert the 32 individual bits of each row to 4 bytes
+    #         buf[offset+3:offset+3+4] = np.packbits(d[irow,:], bitorder='little')
+    #
+    #     # split writes into chunks of less than SPI bufsiz
+    #     # (/sys/module/spidev/parameters/bufsiz ~= 4096 on this machine)
+    #     # split needs to be at command boundary
+    #     for icnk in range(8):
+    #         self.writeBytes(buf[icnk*128*7:(icnk+1)*128*7])
+    #         if data_relay: # slow down transmission since UART to boards is not so fast
+    #             time.sleep(0.03)
+    #
+    #     if not skipreadback:
+    #         err_cnt = 0
+    #         time.sleep(0.1)
+    #         self.flush()
+    #
+    #         rbcmd_buf = np.zeros(1024*(1+2+4), dtype=np.uint8)
+    #         for irow in range(1024):
+    #             offset = irow*(1+2+4)
+    #             rbcmd_buf[offset] = 255                                 # command header
+    #             rbcmd_buf[offset+1] = irow % 256                        # address low byte
+    #             rbcmd_buf[offset+2] = addr_offset + (irow >> 8)         # address high byte
+    #             rbcmd_buf[(offset+3):(offset+7)] = 0                    # (value bytes)
+    #         for icnk in range(8):
+    #             self.writeBytes(rbcmd_buf[icnk*128*7:(icnk+1)*128*7])
+    #             if data_relay: # slow down transmission since UART to boards is not so fast
+    #                 time.sleep(0.05)
+    #
+    #         nb = self.readBytes(1024*7)
+    #         if nb != (1024*7):
+    #             print('Error: RAM readback not enough bytes received\n')
+    #         for irow in range(1024):
+    #             offset = irow*(1+2+4)
+    #             if self.rxtx_buf[offset] != ram_rb_header or \
+    #                 self.rxtx_buf[offset+1] != buf[offset+1] or\
+    #                 self.rxtx_buf[offset+2] != buf[offset+2]-128 or\
+    #                 not all(self.rxtx_buf[offset+3:offset+7] == buf[offset+3:offset+7]):
+    #                 err_cnt += 1
+    #
+    #         if err_cnt > 0:
+    #             print('Error: {:d} RAM {:s} readback errors\n'.format(err_cnt, ram_select))
+    #
+    #     if data_relay:
+    #         # restore RAM B
+    #         self.ramb = ramb_old
+    #         self.uploadToRAM('b', False)
 
 
     # ----------------------------------------------------------------------
@@ -571,17 +571,130 @@ class NNSystem():
     def updateSrcRAM(self, srcram, skipreadback=False):
         if srcram is None:
             srcram = np.zeros([7, 1024, 32], dtype=np.uint8)
-            srcram[:,:,[20, 31]] = 1 # disable LEDs and set all stop bits
+            srcram[:, :, [20, 31]] = 1  # disable LEDs and set all stop bits
         self.srcram = srcram
-        iSatesOn = np.where(srcram[0,:,31]==0)[0] # TODO: what happens if src card 0 not present 
+        # Generate matching RAM A
+        iStatesOn = np.where(srcram[0, :, 31] == 0)[0]  # TODO: what happens if src card 0 not present
         self.rama = np.zeros([1024, 32], dtype=np.uint8)
-        self.n_states_a = len(iSatesOn)
+        self.n_states_a = len(iStatesOn) + 1
         self.n_status_states = 0
-        self.rama[self.n_states_a:, 8] = 1 
+        self.rama[self.n_states_a-1:, 8] = 1
+        # set up RAM B for relaying data to src cards
+        ramb_old = self.ramb.copy()
+        # upload SRCRAM
         for isrcb in range(self.N_SRC_SLOTS):
             if self.srcb_active[isrcb]:
-                self.uploadToRAM('src', skipreadback, isrcb)
-        self.uploadToRAM('a', skipreadback)
+                self.ramb = genSingleSourceRAMB(isrcb + 32, True)
+                self.uploadToRAM('b', True, 0, 1)
+                self.uploadToRAM('src_raw', skipreadback, isrcb, self.n_states_a)
+        # restore RAM B
+        self.ramb = ramb_old
+        self.uploadToRAM('b', False, 0, 1)
+        # upload matching RAM A
+        self.uploadToRAM('a', self.n_states_a, skipreadback)
+
+    # ----------------------------------------------------------------------
+    def uploadToRAM(self, ram_select, skipreadback=False, brd_sel=0, nrows=1024):
+        # Uploads selected ram variable to FPGA
+
+        if ram_select == 'a':
+            addr_offset = 16
+            data_relay = False
+            ram_rb_header = 240
+            d = self.rama  # create alias
+        elif ram_select == 'b':
+            addr_offset = 32
+            data_relay = False
+            ram_rb_header = 240
+            d = self.ramb
+        elif ram_select == 'src':
+            addr_offset = self.BRD_RELAY_OFFSET
+            data_relay = True
+            ram_rb_header = 255
+            ramb_old = self.ramb.copy()
+            self.ramb = genSingleSourceRAMB(brd_sel + 32, True)
+            self.uploadToRAM('b', True, 0, 1)
+            d = self.srcram[brd_sel, :, :]
+        elif ram_select == 'src_raw':  # for fast upload of all srcrams, will not change RAM B, needs to be done externally
+            addr_offset = self.BRD_RELAY_OFFSET
+            data_relay = True
+            ram_rb_header = 255
+            d = self.srcram[brd_sel, :, :]
+        else:
+            print("ram_select invalid\n")
+            return
+
+        self.flush()
+        # flush FSM in FPGA
+        self.writeBytes([0] * 8)
+
+        buf = np.zeros(nrows * (1 + 2 + 4), dtype=np.uint8)
+
+        for irow in range(nrows):
+            offset = irow * (1 + 2 + 4)
+            buf[offset] = 255  # command header
+            buf[offset + 1] = irow % 256  # address low byte
+            buf[offset + 2] = 128 + addr_offset + (irow >> 8)  # address high byte
+            # convert the 32 individual bits of each row to 4 bytes
+            buf[offset + 3:offset + 3 + 4] = np.packbits(d[irow, :], bitorder='little')
+
+            # split writes into chunks of less than SPI bufsiz
+        # (/sys/module/spidev/parameters/bufsiz ~= 4096 on this machine)
+        # split needs to be at command boundary
+        for icnk in range(ceil(nrows / 128)):
+            self.writeBytes(buf[icnk * 128 * 7:min((icnk + 1) * 128 * 7, len(buf))])
+            if data_relay:  # slow down transmission since UART to boards is not so fast
+                time.sleep(0.03)
+
+        if not skipreadback:
+            err_cnt = 0
+            time.sleep(0.1)
+            self.flush()
+
+            rbcmd_buf = np.zeros(nrows * (1 + 2 + 4), dtype=np.uint8)
+            for irow in range(nrows):
+                offset = irow * (1 + 2 + 4)
+                rbcmd_buf[offset] = 255  # command header
+                rbcmd_buf[offset + 1] = irow % 256  # address low byte
+                rbcmd_buf[offset + 2] = addr_offset + (irow >> 8)  # address high byte
+                rbcmd_buf[(offset + 3):(offset + 7)] = 0  # (value bytes)
+            for icnk in range(ceil(nrows / 128)):
+                self.writeBytes(rbcmd_buf[icnk * 128 * 7:min((icnk + 1) * 128 * 7, len(buf))])
+                if data_relay:  # slow down transmission since UART to boards is not so fast
+                    time.sleep(0.05)
+
+            nb = self.readBytes(nrows * 7)
+            if nb != (nrows * 7):
+                print('Error: RAM readback not enough bytes received\n')
+            for irow in range(nrows):
+                offset = irow * (1 + 2 + 4)
+                if self.rxtx_buf[offset] != ram_rb_header or \
+                        self.rxtx_buf[offset + 1] != buf[offset + 1] or \
+                        self.rxtx_buf[offset + 2] != buf[offset + 2] - 128 or \
+                        not all(self.rxtx_buf[offset + 3:offset + 7] == buf[offset + 3:offset + 7]):
+                    err_cnt += 1
+
+            if err_cnt > 0:
+                print('Error: {:d} RAM {:s} readback errors\n'.format(err_cnt, ram_select))
+
+        if data_relay and ram_select != 'src_raw':
+            # restore RAM B
+            self.ramb = ramb_old
+            self.uploadToRAM('b', False, 0, 1)
+    # def updateSrcRAM(self, srcram, skipreadback=False):
+    #     if srcram is None:
+    #         srcram = np.zeros([7, 1024, 32], dtype=np.uint8)
+    #         srcram[:,:,[20, 31]] = 1 # disable LEDs and set all stop bits
+    #     self.srcram = srcram
+    #     iSatesOn = np.where(srcram[0,:,31]==0)[0] # TODO: what happens if src card 0 not present
+    #     self.rama = np.zeros([1024, 32], dtype=np.uint8)
+    #     self.n_states_a = len(iSatesOn)
+    #     self.n_status_states = 0
+    #     self.rama[self.n_states_a:, 8] = 1
+    #     for isrcb in range(self.N_SRC_SLOTS):
+    #         if self.srcb_active[isrcb]:
+    #             self.uploadToRAM('src', skipreadback, isrcb)
+    #     self.uploadToRAM('a', skipreadback)
 
 
     # ----------------------------------------------------------------------

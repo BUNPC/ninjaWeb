@@ -29,11 +29,18 @@ import probe_plot, plot_probe_power_calib
 print("\n-----  NinjaNIRS 2024 byte bokeh server -- using NN24SystemClass -----\n")
 
 # create a plot and style its properties
-source = ColumnDataSource(data=dict(x=[0], y=[0]))
-p = figure(width=1000, height=400,  y_range=(0, 1))
+# source = ColumnDataSource(data=dict(x=[0], y=[0]))
+# p = figure(width=1000, height=400,  y_range=(0, 1), x_range=Range1d(0, 30))
+# p.xaxis.axis_label = "Time [s]"
+# p.yaxis.axis_label = "Voltage [V]"
+#
+# l = p.line(x='x', y='y', source=source, line_width=2)
+
+buffer_size = 30 * 10
+source = ColumnDataSource(data=dict(x=np.zeros(buffer_size), y=np.zeros(buffer_size)))
+p = figure(width=1000, height=400, y_range=(0, 1), x_range=Range1d(0, 30)) # Initial x-range
 p.xaxis.axis_label = "Time [s]"
 p.yaxis.axis_label = "Voltage [V]"
-
 l = p.line(x='x', y='y', source=source, line_width=2)
 
 doc = curdoc()
@@ -42,7 +49,15 @@ doc = curdoc()
 sm = nn_shared_memory.NNSharedMemory(main=False)
 
 async def update(x, y):
-    source.stream(dict(x=x, y=y), rollover=2500)
+    # source.stream(dict(x=x, y=y), rollover=300)
+
+    new_data = dict(x=x, y=y)
+    source.stream(new_data, rollover=buffer_size)
+
+    # Update the x-range to show the latest time window
+    latest_time = x[-1] if x else 0
+    p.x_range.start = latest_time - 30  # Show a 30-second window
+    p.x_range.end = latest_time
 
 def button_run_callback():
     sm.status_shm.buf[sm.STATUS_SHM_IDX['run']] = True
