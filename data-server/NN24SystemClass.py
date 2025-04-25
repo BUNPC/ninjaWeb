@@ -589,7 +589,7 @@ class NNSystem():
         self.ramb = ramb_old
         self.uploadToRAM('b', False, 0, 1)
         # upload matching RAM A
-        self.uploadToRAM('a', False, 0, self.n_states_a)
+        self.uploadToRAM('a', skipreadback, 0, self.n_states_a)
         self.frame_rate = 1 / (self.n_states_a * self.t_state_a)
 
     # ----------------------------------------------------------------------
