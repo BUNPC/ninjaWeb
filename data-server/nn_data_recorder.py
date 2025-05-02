@@ -183,12 +183,12 @@ def recorderLoop(acq_params):
 
 def get_json_struct():
     devInfo = {
-        "flagSpatialMultiplex": 1,
-        "state_fs": 800,
+        "flagSpatialMultiplex": np.float64(1),
+        "state_fs": np.float64(800),
         "acc_active": 0,
         "aux_active": 0,
         "N_DETECTOR_BOARDS": 0,
-        "stat": {"n_smp": 237.0},
+        "stat": {"n_smp": 237.0, "accfs":0.0, "gyrofs":0.0},
         "dataLEDPowerCalibration": [],
         "optPowerLevel": [],
         "srcPowerLowHigh": [],
@@ -204,12 +204,90 @@ def get_json_struct():
     return json_sidecar
 
 def update_json_sidecar(json_sidecar, acq_params, nn):
-    json_sidecar['nSD'] = acq_params.probe['SD']
-    json_sidecar['stateMap'] = acq_params.srcram
-    json_sidecar['devInfo']['acc_active'] = float(nn.acc_active)
-    json_sidecar['devInfo']['aux_active'] = float(nn.aux_active)
-    json_sidecar['devInfo']['N_DETECTOR_BOARDS'] = float(nn.n_detb_active)
-    json_sidecar['devInfo']['stat']['n_smp'] = float(nn.n_smp)
+    probe_data = convert_to_float64(acq_params.probe['SD'])
+    json_sidecar['nSD'] = probe_data
+    json_sidecar['stateMap'] = acq_params.srcram.astype(np.float64)
+    json_sidecar['devInfo']['acc_active'] = np.float64(nn.acc_active)
+    if nn.acc_active:
+        json_sidecar['devInfo']['stat']['accfs'] = np.float64(nn.accfs)
+        json_sidecar['devInfo']['stat']['gyrofs'] = np.float64(nn.gyrofs)
+    json_sidecar['devInfo']['aux_active'] = np.float64(nn.aux_active)
+    json_sidecar['devInfo']['N_DETECTOR_BOARDS'] = np.float64(nn.n_detb_active)
+    json_sidecar['devInfo']['stat']['n_smp'] = np.float64(nn.n_smp)
     return json_sidecar
-    
+
+def convert_to_float64(data):
+    """
+    Recursively traverses a data structure (dict, list, tuple, ndarray)
+    and converts any numerical NumPy arrays found within it to float64 dtype.
+    Handles nested structures, structured arrays, and object arrays common
+    in loaded .mat files.
+
+    Args:
+        data: The data structure (potentially nested) to traverse.
+
+    Returns:
+        The modified data structure with numerical NumPy arrays converted.
+    """
+    # Case 0: Handle None explicitly if it appears (e.g., from empty MATLAB cells)
+    if data is None:
+        return None
+    # Case 1: Dictionary
+    elif isinstance(data, dict):
+        new_dict = {}
+        for key, value in data.items():
+            # Skip internal keys added by loadmat
+            if key.startswith('__') and key.endswith('__'):
+                new_dict[key] = value # Keep header/version info
+            else:
+                new_dict[key] = convert_to_float64(value)
+        return new_dict
+    # Case 2: List or Tuple
+    elif isinstance(data, (list, tuple)):
+        # Apply conversion to each item in the sequence
+        new_list = [convert_to_float64(item) for item in data]
+        # Return the same type (list or tuple)
+        return type(data)(new_list)
+    # Case 3: NumPy Array
+    elif isinstance(data, np.ndarray):
+        # Case 3a: Structured Array (dtype has named fields)
+        if data.dtype.names:
+            # Create a copy with the same structured dtype to modify safely
+            converted_array = np.copy(data)
+            for name in data.dtype.names:
+                try:
+                    # Recursively convert the data associated with this field name
+                    # Accessing data[name] gives an array of all values for that field
+                    original_field_data = data[name]
+                    converted_field_data = convert_to_float64(original_field_data)
+                    # Assign the potentially converted data back to the field in the copy
+                    converted_array[name] = converted_field_data
+                except Exception as e:
+                    # Catch potential errors during conversion or assignment
+                    # Keep original data in the copy for this field if conversion fails
+                    converted_array[name] = data[name] # Or handle differently if needed
+            return converted_array
+
+        # Case 3b: Simple Numerical Array (and not structured)
+        elif np.issubdtype(data.dtype, np.number):
+            # Convert to float64 if it's numerical and not already float64
+            if data.dtype != np.float64:
+                return data.astype(np.float64)
+            else:
+                # Already float64, return as is
+                return data
+
+        # Case 3c: Array of Objects (dtype is 'O') - often contains nested data
+        elif data.dtype == np.object_:
+             converter_func = np.frompyfunc(convert_to_float64, 1, 1)
+             return converter_func(data)
+
+        # Case 3d: Other non-numerical array types (e.g., strings, bools)
+        else:
+            # No conversion needed for non-numerical, non-structured, non-object arrays
+            return data
+    # Case 4: Other data types (scalars, strings, etc.)
+    else:
+        # Return scalars, strings, etc., as is
+        return data
 

@@ -11,7 +11,7 @@ def getFileNames(is_calib = False, calib_level = 0):
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
     if not is_calib:
-        filename = 'ninjaWeb_'+datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        filename = 'ninjaNIRS2024_'+datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         filename_bin = os.path.join(data_dir,filename+'.bin')
         filename_log = os.path.join(data_dir, filename + '.log')
         filename_json = os.path.join(data_dir, filename+'_stateMap.mat')

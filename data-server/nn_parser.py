@@ -76,6 +76,9 @@ def parserLoop(queue):
                     aux_val = float(sum([buf[5+ib]*256**ib for ib in range(3)]) * 3.3/(237)/4095)
                     si = sm.status_shm.buf[sm.STATUS_SHM_IDX['disp_rbuf_wr_idx']]
                     ml_idx = struct.unpack('H', sm.plot_ml_idx.buf[:2])[0]
+                    selected_wavelenth = struct.unpack('H', sm.plot_wavelength.buf[:2])[0]
+                    if selected_wavelenth == 2:
+                        ml_idx = ml_idx+ml_length
                     sm.disp_rbuf[si] = float(data_ml[:,ml_idx][0])
                     # print(float(data_ml[:,ml_idx][0]))
                     if np.isnan(sm.disp_rbuf_time[si-1]):
@@ -94,25 +97,29 @@ def parserLoop(queue):
                 time.sleep(0.0001)
                 if not sm.status_shm.buf[sm.STATUS_SHM_IDX['run']]:
                     if sm.status_shm.buf[sm.STATUS_SHM_IDX['update_statemap_file']]:
-                        statemap_folder = os.path.join('..', 'meas', datetime.datetime.now().strftime('%y-%m-%d'))
-                        pattern = os.path.join(statemap_folder, '*_stateMap.mat')
-                        state_map_files = glob.glob(pattern)
+                        if isinstance(data_power, np.ndarray):
+                            statemap_folder = os.path.join('..', 'meas', datetime.datetime.now().strftime('%y-%m-%d'))
+                            pattern = os.path.join(statemap_folder, '*_stateMap.mat')
+                            state_map_files = glob.glob(pattern)
 
-                        if state_map_files:
-                            # Find the latest file
-                            print('updating state map...........................')
-                            latest_file = max(state_map_files, key=os.path.getmtime)
-                            mat_data = loadmat(latest_file, struct_as_record=False, squeeze_me=True)
-                            devInfo = mat_data['devInfo']
-                            setattr(devInfo, 'dataLEDPowerCalibration', data_power)
-                            setattr(devInfo, 'optPowerLevel', opt_power_level)
-                            setattr(devInfo, 'srcPowerLowHigh', src_power_low_high)
-                            setattr(devInfo, 'dSig', dark_sig)
-                            setattr(devInfo, 'srcModuleGroups', src_module_groups)
-                            mat_data['stateIndices'] = acq_params.mapped_indices+np.array([1,1,2])
-                            mat_data['devInfo'] = devInfo
-                            savemat(latest_file, mat_data)
-                            sm.status_shm.buf[sm.STATUS_SHM_IDX['update_statemap_file']] = False
+                            if state_map_files:
+                                # Find the latest file
+                                latest_file = max(state_map_files, key=os.path.getmtime)
+                                mat_data = loadmat(latest_file, struct_as_record=False, squeeze_me=True)
+                                devInfo = mat_data['devInfo']
+                                setattr(devInfo, 'dataLEDPowerCalibration', data_power.astype(np.float64))
+                                opt_power_level_mat = opt_power_level+1
+                                setattr(devInfo, 'optPowerLevel', opt_power_level_mat.astype(np.float64))
+                                setattr(devInfo, 'srcPowerLowHigh', src_power_low_high.astype(np.float64))
+                                setattr(devInfo, 'dSig', dark_sig.astype(np.float64))
+                                src_module_groups_float64 = [np.array(sublist, dtype=np.float64) for sublist in
+                                                           src_module_groups]
+                                setattr(devInfo, 'srcModuleGroups', src_module_groups_float64)
+                                state_indices = acq_params.mapped_indices+np.array([1,1,2])
+                                mat_data['stateIndices'] = state_indices.astype(np.float64)
+                                mat_data['devInfo'] = devInfo
+                                savemat(latest_file, mat_data)
+                                sm.status_shm.buf[sm.STATUS_SHM_IDX['update_statemap_file']] = False
 
         else:
             pow_range = 7
@@ -150,14 +157,19 @@ def parserLoop(queue):
                     data_states_power[:, :, iPower - 1] = np.mean(data_organized_by_state, axis=0, where=~np.isnan(data_organized_by_state))
                 else:
                     data_dark = np.nanmean(data_dark_temp, axis=0)
-                    data_sates_dark = data_organized_by_state
+                    data_states_dark = data_organized_by_state
                     data_states_power = np.zeros((data_organized_by_state.shape[1], data_organized_by_state.shape[2], pow_range))
                     data_power = np.zeros((data_dark_temp.shape[1], pow_range))
 
-            print('Data power...')
-            print(data_power.shape)
-            print(data_power)
-            print('plotting results now................')
+            # Save `data_dark` and `data_states_dark` for plotting dark state results in the Power Calibration GUI.
+            # These results are stored in the `tmp_runtime_data` folder for access by the web application process.
+            data_dir = os.path.join('..', 'meas', 'tmp_runtime_data')
+            if not os.path.exists(data_dir):
+                os.makedirs(data_dir)
+            file_path = os.path.join(data_dir, 'dark.mat')
+            dark_mat = {'data_dark': data_dark, 'data_states_dark': data_states_dark}
+            savemat(file_path, dark_mat)
+
             thresholds = [-45.7625, -2.2407]
             threshHigh = 10 ** (thresholds[1] / 20)
             threshLow = 10 ** (thresholds[0] / 20)
@@ -190,7 +202,7 @@ def parserLoop(queue):
             while True:
                 if sm.getStatus('raw_rbuf_wr_idx') != sm.getStatus('raw_rbuf_rd_idx'):
                     print('inside signal level adjustment')
-                if not sm.status_shm.buf[sm.STATUS_SHM_IDX['run']]:
+                if not sm.status_shm.buf[sm.STATUS_SHM_IDX['sig_level_tuning']]:
                     break
                 si = sm.status_shm.buf[sm.STATUS_SHM_IDX['raw_rbuf_rd_idx']] % sm.RAW_RBUF_SLOTS * sm.RAW_RBUF_SLOT_SIZE
                 se = si + sm.RAW_RBUF_SLOT_SIZE
@@ -336,7 +348,7 @@ def power_calibration_dual_levels(ml, nSrcs, dataLEDPowerCalibration, thresholds
                 for iMod in srcModuleGroups[iSg]:
                     lst = np.where(
                         (ml[:, 0] == ((iMod - 1) * 8 + iSrc + 1)) & (ml[:, 3] == iWav + 1) & (rhoSDS >= 0) & (
-                                rhoSDS <= 45))[0]
+                                rhoSDS <= 100))[0] #FIXME - 100 is hardcoded. Add edit box so that use can change it.
                     lstSMS[iSrc][iWav][iSg] = np.append(lstSMS[iSrc][iWav][iSg], lst)
 
     threshHigh = 10 ** (thresholds[1] / 20)

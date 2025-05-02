@@ -1,0 +1,26 @@
+/* custom_styles.css */
+
+/* Improve vertical alignment for text inputs and divs in Bokeh layouts */
+/* Targeting elements often found within Bokeh layout containers */
+.bk-layout-child input,
+.bk-layout-child div {
+    vertical-align: middle !important; /* Apply vertical-align middle and make it important */
+}
+
+/* A slightly broader rule targeting inputs/divs anywhere under the main bokeh root */
+/* Use this if the rule above isn't sufficient */
+/*
+.bk-root input,
+.bk-root div {
+     vertical-align: middle !important;
+}
+*/
+
+/* You can add any other custom styles here */
+/* For example, maybe adjust some padding or margins if needed after alignment */
+/*
+.bk-layout-child input[type="text"] {
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+*/
