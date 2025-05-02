@@ -22,7 +22,7 @@ def bitfield(num, nbits=8):
 
 # ----------------------------------------------------------------------
 def genSingleSourceRAMB(isrc, comm_to_brd=False):
-    # Generate RAM B contents to collect data only from a single data souce.
+    # Generate RAM B contents to collect data only from a single data source.
     # comm_to_brd: If True, set RAM B in such a way to allow pass through communication
     # to plug in cards (src or det).
 
@@ -143,9 +143,9 @@ class NNSystem():
         # duration of each RAM B state
         t_state_b = self.clk_div*8/96e6
         # duration of each RAM A state
-        t_state_a = t_state_b * self.n_states_b
-        # target ADC sampling perid
-        t_smp_target = max((t_state_a -t_smp_holdoff_start - t_smp_holdoff_end)/n_smp_target, t_smp_min)
+        self.t_state_a = t_state_b * self.n_states_b
+        # target ADC sampling period
+        t_smp_target = max((self.t_state_a -t_smp_holdoff_start - t_smp_holdoff_end)/n_smp_target, t_smp_min)
         # number of B states for each ADC sample
         ni_smp = max(ceil(t_smp_target/t_state_b), 2)
         # number of B states the trig signal is '1' for each ADC sample
@@ -197,9 +197,7 @@ class NNSystem():
         # mark sequence end
         self.ramb[(self.n_states_b-1):, 17] = 1
 
-        self.frame_rate = 1 / (self.clk_div * 8/96e6 * self.n_states_b)
 
-       
     # ----------------------------------------------------------------------
     def powerOn(self):
         # turn power on to subsystems sequentially
@@ -321,9 +319,9 @@ class NNSystem():
         self.clk_div = 20
         self.run = False
         self.updateStatReg(True)
-        time.sleep(0.1)
+        time.sleep(0.01)
         self.flush()
-        time.sleep(0.1)
+        time.sleep(0.05)
         self.flush()
         self.updateStatReg(False)
 
@@ -563,7 +561,7 @@ class NNSystem():
         self.run = False
         self.updateStatReg()
         self.flush()
-        time.sleep(0.3)
+        time.sleep(max(0.01, self.n_states_a*self.t_state_a)) # This should be the max length of one frame
         self.flush()
 
 
@@ -591,7 +589,8 @@ class NNSystem():
         self.ramb = ramb_old
         self.uploadToRAM('b', False, 0, 1)
         # upload matching RAM A
-        self.uploadToRAM('a', self.n_states_a, skipreadback)
+        self.uploadToRAM('a', skipreadback, 0, self.n_states_a)
+        self.frame_rate = 1 / (self.n_states_a * self.t_state_a)
 
     # ----------------------------------------------------------------------
     def uploadToRAM(self, ram_select, skipreadback=False, brd_sel=0, nrows=1024):
@@ -638,17 +637,16 @@ class NNSystem():
             # convert the 32 individual bits of each row to 4 bytes
             buf[offset + 3:offset + 3 + 4] = np.packbits(d[irow, :], bitorder='little')
 
-            # split writes into chunks of less than SPI bufsiz
+        # split writes into chunks of less than SPI bufsiz
         # (/sys/module/spidev/parameters/bufsiz ~= 4096 on this machine)
         # split needs to be at command boundary
         for icnk in range(ceil(nrows / 128)):
             self.writeBytes(buf[icnk * 128 * 7:min((icnk + 1) * 128 * 7, len(buf))])
             if data_relay:  # slow down transmission since UART to boards is not so fast
-                time.sleep(0.03)
+                time.sleep(0.0015)
 
         if not skipreadback:
             err_cnt = 0
-            time.sleep(0.1)
             self.flush()
 
             rbcmd_buf = np.zeros(nrows * (1 + 2 + 4), dtype=np.uint8)
@@ -661,7 +659,7 @@ class NNSystem():
             for icnk in range(ceil(nrows / 128)):
                 self.writeBytes(rbcmd_buf[icnk * 128 * 7:min((icnk + 1) * 128 * 7, len(buf))])
                 if data_relay:  # slow down transmission since UART to boards is not so fast
-                    time.sleep(0.05)
+                    time.sleep(0.0015)
 
             nb = self.readBytes(nrows * 7)
             if nb != (nrows * 7):
@@ -703,7 +701,7 @@ class NNSystem():
         self.rst_tx_fifo = True
         self.run = False
         self.updateStatReg(True)
-        time.sleep(0.05)
+        time.sleep(0.001)
         self.rst_tx_fifo = False
         self.updateStatReg(True)
 
