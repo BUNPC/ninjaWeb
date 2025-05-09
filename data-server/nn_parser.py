@@ -33,6 +33,7 @@ def parserLoop(queue):
     src_module_groups = []
     src_power_low_high = []
     data_power = []
+    n_samples = 0
     while not sm.status_shm.buf[sm.STATUS_SHM_IDX['shutdown']]:
         if not sm.getStatus('power_calib'):
             # current_time = time.time()
@@ -77,10 +78,31 @@ def parserLoop(queue):
                     si = sm.status_shm.buf[sm.STATUS_SHM_IDX['disp_rbuf_wr_idx']]
                     ml_idx = struct.unpack('H', sm.plot_ml_idx.buf[:2])[0]
                     selected_wavelenth = struct.unpack('H', sm.plot_wavelength.buf[:2])[0]
+                    if n_samples == 0:
+                        # data_ml_mean = np.nanmean(data_ml, axis=0, keepdims=True)
+                        data_ml_mean = data_ml[-1:,:]
+                        data_ml_mean = np.nan_to_num(data_ml_mean, nan=0.1)
+                        print('data_ml_mean-shape', data_ml_mean.shape)
+                        print('data_ml-shape', data_ml.shape)
+                    else:
+                        non_nan_mask = ~np.isnan(data_ml)
+                        print('non_nan_mask-shape',non_nan_mask.shape)
+                        print('data_ml_mean-shape', data_ml_mean.shape)
+                        print('data_ml-shape', data_ml.shape)
+                        data_ml_mean[non_nan_mask] = 0.8*data_ml_mean[non_nan_mask]+0.2*data_ml[non_nan_mask]
+                        # data_ml_mean[non_nan_mask] = (n_samples*data_ml_mean[non_nan_mask]+data_ml[non_nan_mask])/(n_samples+1)
+                    n_samples = n_samples+1
                     if selected_wavelenth == 2:
                         ml_idx = ml_idx+ml_length
-                    sm.disp_rbuf[si] = float(data_ml[:,ml_idx][0])
-                    # print(float(data_ml[:,ml_idx][0]))
+                    sig_val = float(data_ml[:,ml_idx][0])
+                    sig_mean = float(data_ml_mean[:,ml_idx][0])
+                    print('sig_val', sig_val)
+                    print('sig_mean', sig_mean)
+                    if sm.getStatus('delta_OD'):
+                        sig = -np.log(sig_val/sig_mean)
+                    else:
+                        sig = -np.log(sig_val)
+                    sm.disp_rbuf[si] = sig.item()
                     if np.isnan(sm.disp_rbuf_time[si-1]):
                         sm.disp_rbuf_time[si] = 0
                     else:
@@ -97,6 +119,7 @@ def parserLoop(queue):
                 time.sleep(0.0001)
                 if not sm.status_shm.buf[sm.STATUS_SHM_IDX['run']]:
                     if sm.status_shm.buf[sm.STATUS_SHM_IDX['update_statemap_file']]:
+                        n_samples = 0
                         if isinstance(data_power, np.ndarray):
                             statemap_folder = os.path.join('..', 'meas', datetime.datetime.now().strftime('%y-%m-%d'))
                             pattern = os.path.join(statemap_folder, '*_stateMap.mat')
@@ -287,9 +310,9 @@ def get_packet_length(sm):
 def get_n_frames(sm, acq_params, packet_length, n_states, n):
     # raw_bytes_packet = np.array([], dtype=np.uint8)
     raw_bytes_packet = np.zeros(packet_length * n_states, dtype=np.uint8)
-    print('raw_bytes_packet_shape',raw_bytes_packet.shape)
+    # print('raw_bytes_packet_shape',raw_bytes_packet.shape)
     frame_counter = 0
-    print('beginning get n_frames')
+    # print('beginning get n_frames')
     previous_time = time.time()
     while True:
         if sm.getStatus('raw_rbuf_wr_idx') != sm.getStatus('raw_rbuf_rd_idx'):
@@ -308,11 +331,11 @@ def get_n_frames(sm, acq_params, packet_length, n_states, n):
                     break
             else:
                 # raw_bytes_packet = np.append(raw_bytes_packet, raw_bytes[:packet_length])
-                print('current byte index and length', raw_bytes[1]*packet_length, (raw_bytes[1]+1)*packet_length)
+                # print('current byte index and length', raw_bytes[1]*packet_length, (raw_bytes[1]+1)*packet_length)
                 raw_bytes_packet[raw_bytes[1]*packet_length:(raw_bytes[1]+1)*packet_length] = raw_bytes[:packet_length]
                 previous_time, elapsed_time = get_lapsed_time(previous_time)
-                print(f"Elapsed time in get n frames: {elapsed_time:.4f} seconds")
-                print('raw bytes[1] and n_states:', raw_bytes[1], n_states)
+                # print(f"Elapsed time in get n frames: {elapsed_time:.4f} seconds")
+                # print('raw bytes[1] and n_states:', raw_bytes[1], n_states)
         else:
             time.sleep(0.0001)
         if not sm.status_shm.buf[sm.STATUS_SHM_IDX['run']]:

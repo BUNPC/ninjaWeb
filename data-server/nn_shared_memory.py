@@ -14,7 +14,8 @@ class NNSharedMemory:
                               ('raw_rbuf_wr_idx', 0), \
                               ('power_calib', False), \
                               ('sig_level_tuning', False),\
-                              ('update_statemap_file', False), \
+                              ('delta_OD', False),\
+                              ('update_statemap_file', False),\
                               ('shutdown', False) ]
     STATUS_SHM_IDX = dict([ (key[0], idx) for idx, key in enumerate(STATUS_SHM_FIELDS_INIT) ])
     STATUS_SHM_SIZE = len(STATUS_SHM_FIELDS_INIT)

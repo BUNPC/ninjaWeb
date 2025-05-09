@@ -20,7 +20,7 @@ import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 
 from bokeh.layouts import column, row, Spacer, layout
-from bokeh.models import Button, ColumnDataSource, TextInput,  Div, Range1d, RadioButtonGroup, CheckboxGroup, ToggleButtonGroup, CheckboxButtonGroup
+from bokeh.models import Button, ColumnDataSource, TextInput,  Div, Range1d, DataRange1d, RadioButtonGroup, CheckboxGroup, ToggleButtonGroup, CheckboxButtonGroup
 from bokeh.plotting import figure, curdoc
 from bokeh.io import curdoc as curdoc2
 from bokeh.models import CustomJS
@@ -43,9 +43,11 @@ print("\n-----  NinjaNIRS 2024 byte bokeh server -- using NN24SystemClass -----\
 #
 # l = p.line(x='x', y='y', source=source, line_width=2)
 
-buffer_size = 30 * 10
+initial_time_window = 10
+buffer_size = initial_time_window * 10
 source = ColumnDataSource(data=dict(x=np.zeros(buffer_size), y=np.zeros(buffer_size)))
-p = figure(width=1000, height=400, y_range=(0, 1), x_range=Range1d(0, 30)) # Initial x-range
+# p = figure(width=1000, height=400, y_range=DataRange1d(), x_range=Range1d(0, 10)) # Initial x-range
+p = figure(width=1000, height=400, x_range=Range1d(0, 10)) # Initial x-range
 p.xaxis.axis_label = "Time [s]"
 p.yaxis.axis_label = "Voltage [V]"
 l = p.line(x='x', y='y', source=source, line_width=2)
@@ -57,17 +59,32 @@ sm = nn_shared_memory.NNSharedMemory(main=False)
 
 # Variables to track previous state for transition detection in blocking_task
 prev_power_calib_status = False
-
+current_time_window = initial_time_window
 async def update(x, y):
     # source.stream(dict(x=x, y=y), rollover=300)
 
     new_data = dict(x=x, y=y)
     source.stream(new_data, rollover=buffer_size)
 
+    # 2. Get the current x and y data from the source
+    all_x = np.array(source.data['x'])
+    all_y = np.array(source.data['y'])
+
     # Update the x-range to show the latest time window
     latest_time = x[-1] if x else 0
-    p.x_range.start = latest_time - 30  # Show a 30-second window
+    p.x_range.start = latest_time - current_time_window  # Show a 30-second window
     p.x_range.end = latest_time
+
+    # visible_mask = (all_x >= p.x_range.start) & (all_x <= p.x_range.end)
+    # visible_y = all_y[visible_mask]
+    #
+    # y_min = np.min(visible_y)
+    # y_max = np.max(visible_y)
+    # y_padding = (y_max - y_min) * 0.1
+    # if y_padding == 0:  # Handle case where all visible y values are the same
+    #     y_padding = 0.1  # Or some small fixed value
+    # p.y_range.start = y_min - y_padding
+    # p.y_range.end = y_max + y_padding
 
 # --- UI Update function triggered by server state changes ---
 def update_darkplots_and_ui():
@@ -91,13 +108,13 @@ def update_darkplots_and_ui():
 
     # --- Plot Sources (Red Circles) ---
     source_cds = ColumnDataSource(data=dict(x=src_x, y=src_y))
-    power_calib_dark_level.scatter(x='x', y='y', source=source_cds, marker='circle', size=8, color='red',
-                                   line_color='black')
+    power_calib_dark_level.scatter(x='x', y='y', source=source_cds, marker='circle', size=5, color='red',
+                                   line_color=None)
 
     # --- Plot Detectors (Blue Circles) ---
     detector_cds = ColumnDataSource(data=dict(x=det_x, y=det_y))
-    power_calib_dark_level.scatter(x='x', y='y', source=detector_cds, marker='circle', size=8, color='blue',
-                                   line_color='black')
+    power_calib_dark_level.scatter(x='x', y='y', source=detector_cds, marker='circle', size=5, color='blue',
+                                   line_color=None)
 
     # --- Prepare data for Dark Signal Lines (Edges) ---
     edge_xs = []
@@ -229,7 +246,7 @@ def button_run_power_calib_callback():
         button_run_power_calib.label = "Calibrating..."
         button_run_power_calib.button_type = "success"
         button_signal_level.button_type = "default"
-        power_calib_status_div.text = "<span style='color: green;'>Acquiring power calibration data. It will take few seconds</span>"
+        power_calib_status_div.text = "<span style='color: green;'>Acquiring power calibration data. It will take less than 30 seconds</span>"
     # sm.status_shm.buf[sm.STATUS_SHM_IDX['power_calib']] = True
     # sm.status_shm.buf[sm.STATUS_SHM_IDX['sig_level_tuning']] = False
     # sm.status_shm.buf[sm.STATUS_SHM_IDX['run']] = False # Activating this mode stops others
@@ -276,12 +293,49 @@ def wavelength_callback(attr, old, new):
 
 # Callback for Delta OD CheckboxGroup
 def delta_od_callback(attr, old, new):
-    pass
-    # 'new' is a list of active indices (0 if checked, [] if unchecked)
-    # delta_od_enabled = 0 in new
-    # print(f"Delta OD Enabled: {delta_od_enabled}")
-    # You would typically update shared memory here
-    # sm.status_shm.buf[sm.STATUS_SHM_IDX['delta_od_enabled']] = delta_od_enabled # Assuming an index for delta OD in SHM
+    if new:
+        sm.status_shm.buf[sm.STATUS_SHM_IDX['delta_OD']] = True
+    else:
+        sm.status_shm.buf[sm.STATUS_SHM_IDX['delta_OD']] = False
+
+def time_window_callback(attr, old, new):
+    global current_time_window
+    try:
+        new_window = float(new)
+        if new_window > 0:
+            current_time_window = new_window
+            # Update plot range based on the latest data point and new window
+            if len(source.data['x']) > 0:
+                latest_time = source.data['x'][-1]
+                p.x_range.start = latest_time - current_time_window
+                p.x_range.end = latest_time
+        else:
+            time_window_input.value = str(current_time_window) # Revert to previous valid value
+    except ValueError:
+        time_window_input.value = str(current_time_window) # Revert to previous valid value
+
+def get_disk_space():
+    try:
+        # Execute the df -h / command to get human-readable disk usage for the root filesystem
+        result = subprocess.run(['df', '-h', '/'], capture_output=True, text=True, check=True)
+        lines = result.stdout.splitlines()
+        # The line with the data is the second line
+        if len(lines) > 1:
+            parts = lines[1].split()
+            # Available space is the 4th column (index 3)
+            available = parts[3]
+            return f"Available SD Card Space: {available}"
+        return "Could not parse disk space."
+    except FileNotFoundError:
+        return "Command 'df' not found."
+    except subprocess.CalledProcessError as e:
+        return f"Error getting disk space: {e}"
+    except Exception as e:
+        return f"An unexpected error occurred: {e}"
+
+# Callback for the update memory button
+def update_memory_callback():
+    memory_div.text = get_disk_space()
 
 def blocking_task():
     global prev_power_calib_status
@@ -293,7 +347,6 @@ def blocking_task():
         if sm.getStatus('disp_rbuf_wr_idx') != sm.getStatus('disp_rbuf_rd_idx'):
             if not sm.getStatus('sig_level_tuning'):
                 y = sm.disp_rbuf[sm.getStatus('disp_rbuf_rd_idx')%sm.DISP_RBUF_SIZE]
-                print(y)
                 x = sm.disp_rbuf_time[sm.getStatus('disp_rbuf_rd_idx')%sm.DISP_RBUF_SIZE]
                 sm.status_shm.buf[sm.STATUS_SHM_IDX['disp_rbuf_rd_idx']] = (sm.status_shm.buf[sm.STATUS_SHM_IDX['disp_rbuf_rd_idx']] + 1) % sm.DISP_RBUF_SIZE
                 # x = x0/800
@@ -522,6 +575,9 @@ button_stop.on_event('button_click', button_stop_callback)
 button_enable_power_calib = Button(label='Enable Power Calib', width=200, align = "center")
 button_enable_power_calib.on_event('button_click', button_enable_power_calib_callback)
 
+memory_div = Div(text=get_disk_space(), width=200, align='center')
+update_memory_button = Button(label="Refresh Memory", width=200, align='center')
+update_memory_button.on_event('button_click', update_memory_callback)
 
 
 
@@ -530,6 +586,14 @@ delta_od_checkbox = CheckboxGroup(
     labels=["Delta OD"], active=[], width=200, align="center"
 )
 delta_od_checkbox.on_change('active', delta_od_callback)
+
+# Add TextInput for Time Window Length
+time_window_label = Div(text="Time Window [s]:", width=100, align="end")
+time_window_input = TextInput(value=str(initial_time_window), width=100)
+time_window_input.on_change('value', time_window_callback)
+
+time_window_row = row(time_window_label, time_window_input, width=200, align="center")
+
 
 power_calib_status_div = Div(text="<span style='color: red;'> </span>", width=250, align='center')
 
@@ -585,7 +649,7 @@ def gen_poor_srcs_dets_axis():
     power_calib_poor_snr_srcs.text(x=0.05, y=9.5, text='text', source=power_calib_poor_snr_srcs_cds,
                                    text_align='left', text_baseline='top', text_color='red') # Adjusted y and baseline
     power_calib_poor_snr_dets.text(x=0.05, y=9.5, text='text', source=power_calib_poor_snr_dets_cds,
-                                   text_align='left', text_baseline='top', text_color='red') # Adjusted y and baseline
+                                   text_align='left', text_baseline='top', text_color='blue') # Adjusted y and baseline
     power_calib_poor_snr_srcs.xgrid.grid_line_color = None
     power_calib_poor_snr_srcs.xaxis.visible = False
     power_calib_poor_snr_srcs.yaxis.visible = False # Hide y-axis
@@ -605,12 +669,15 @@ probe_graph.edge_renderer.data_source.selected.on_change('indices', edge_select_
 button_panel = column(
     Spacer(height=100),
     button_set_date_time,
+    update_memory_button,
+    memory_div,
     button_run,
     button_stop,
     button_enable_power_calib,
     Spacer(height=20), # Add some space
     wavelength_radio_button_group,
     delta_od_checkbox,
+    time_window_row,
     Spacer(width=500) # Keep the original spacer for alignment
 )
 button_signal_level = Button(label="Signal level adjustment", width=200, align='center', disabled=True)
