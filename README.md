@@ -10,7 +10,7 @@ This guide outlines the steps to set up your **Raspberry Pi 5** for the **ninjaW
 * [Setup Wi-Fi Router / Mobile Hotspot](#setup-wi-fi-router--mobile-hotspot)
 * [Copy ninjaWeb Code to Raspberry Pi](#copy-ninjaweb-code-to-raspberry-pi)
 * [SSH into Raspberry Pi](#ssh-into-raspberry-pi)
-* [Setup `data-server` and `bokeh-server` Environments](#Setup `data-server` and `bokeh-server` Environments)
+* [Setup `data-server` and `bokeh-server` Environments](#Setup-`data-server`-and-`bokeh-server`-Environments)
 
 ---
 
