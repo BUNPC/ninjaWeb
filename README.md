@@ -183,4 +183,47 @@ deactivate
 ---
 
 ## Run NinjaWeb
+# ninjaNIRS Startup and Data Collection Guide
+
+## 1. Power On
+- Turn on the **ninjaNIRS** device.
+
+## 2. Network Configuration
+- Ensure that **both the ninjaNIRS system and the laptop running ninjaWeb** are connected to the **same Wi-Fi network**.
+
+## 3. Launch Servers
+Open **two terminal windows** on the laptop: 
+
+### Terminal 1: Start Data Server
+```bash
+cd ~/ninjaWeb/data-server/
+source ./bin/activate
+python3 nn_data_server_main.py
+```
+
+### Terminal 2: Start Bokeh Server
+```bash
+cd ~/ninjaWeb/bokeh-server/
+source ./bin/activate
+bokeh serve web-app --allow-websocket-origin=ninja-pi.local:5006
+```
+These two processes can be automatically launched when the Raspberry Pi boots up.
+
+## 4. Access Web Interface
+- Open a web browser and navigate to:  
+  **http://ninja-pi.local:5006/web-app**
+
+## 5. Set System Time
+- Click the **“Date and Time”** button to sync the system clock on ninjaNIRS.  
+  > 🔹 *The button will fade to gray once the time is set successfully.*  
+  > 🔹 *If the router is connected to the internet, the time may already be set.*
+
+## 6. Enable Power Calibration
+- Click the **"Enable Power Calibration"** button to activate calibration controls.
+
+## 7. Perform Calibration
+- Complete the **power calibration** process and press **Return** button
+
+## 8. Start Data Collection
+- After calibration, click the **“Run”** button to begin data collection.
 
