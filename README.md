@@ -158,19 +158,19 @@ Here are the SSH details:
 
 ---
 
-## Setup `data-server` Environment
+## Setup `data-server` and `bokeh-server` Environments
 
-Once you've SSH'd into the Raspberry Pi, run these commands to set up the `data-server` environment:
+Once you've SSH'd into the Raspberry Pi, run these commands to set up the `data-server` and `bokeh-server` environments:
 
 ```bash
 cd ~/ninjaWeb/data-server/
 python3 -m venv .
 source ./bin/activate
-# Install required packages (e.g., pip install -r requirements.txt if a requirements file exists)
+pip install -r requirements.txt
 deactivate
 
 cd ~/ninjaWeb/bokeh-server/
 python3 -m venv .
 source ./bin/activate
-# Install required packages (e.g., pip install -r requirements.txt if a requirements file exists)
+pip install -r requirements.txt
 deactivate
