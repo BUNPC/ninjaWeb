@@ -17,55 +17,85 @@ This guide outlines the steps to set up your **Raspberry Pi 5** for the **ninjaW
 
 ## Prepare Your SD Card with Raspberry Pi OS
 
-First, insert the **SD card** into your computer’s **SD card reader**.
+Here's a step-by-step guide to preparing your SD card for Raspberry Pi OS:
 
-Next, open your web browser and go to the [Raspberry Pi Software](https://www.raspberrypi.com/software/) download page. Click the **Download for Windows** button, and once the download is complete, run the `.exe` file to install **Raspberry Pi Imager** on your system. The Imager will automatically open after installation.
+### 1. Insert SD Card
 
-In the Imager interface, under **Device**, select **Raspberry Pi 5**. Under **Operating System**, choose:
+Insert the SD card into your computer’s SD card reader.
 
-For **Storage**, select the **SD card** you inserted earlier, then click **Next** to continue.
+### 2. Download Raspberry Pi Imager
 
-Now, click on **Edit Settings** to configure your Raspberry Pi.
+Open your web browser and go to the [Raspberry Pi Software](https://www.raspberrypi.com/software/) download page.
 
-Under **General**, set the following:
-* **Set Hostname:**
-    ```
-    ninja-pi.local
-    ```
-* **Set Username:**
-    ```
-    NinjaNIRS
-    ```
-* **Set Password:**
-    ```
-    nn2022pidev
-    ```
+### 3. Download and Install Raspberry Pi Imager
 
-For **LAN Settings**:
-* **SSID (Wi-Fi network name):**
-    ```
-    ninjaGUIpy
-    ```
-* **Password:**
-    ```
-    ninjaGUIpy2023
-    ```
-* **Wireless LAN Country:**
-    ```
-    US
-    ```
+Press the **Download for Windows** button. Once the download completes, run the `.exe` file to install Raspberry Pi Imager on your system.
 
-Make sure to configure the correct **Time Zone** (e.g., `America/New_York` if you're in the Eastern Time Zone).
+### 4. Launch Raspberry Pi Imager
 
-Under **Services**, enable **SSH** and select **Use password authentication**.
+After installation, Raspberry Pi Imager will automatically open.
 
-In **Options**, uncheck **Enable telemetry**.
+### 5. Select Device
 
-Once all settings are configured, press **Save**. You'll be asked to confirm; press **Yes** to begin writing the Raspberry Pi OS to the SD card.
+In the Imager interface, under **Device**, select **Raspberry Pi 5**.
 
-Wait for the process to finish. Once done, safely eject the **SD card** and insert it into your **Raspberry Pi 5**.
+### 6. Choose Operating System
 
-Your Raspberry Pi 5 is now set up with the **ninjaWeb** configuration. Proceed to power it up and connect it to the internet via LAN or Wi-Fi.
+Under **Operating System**, choose:
+
+* **Raspberry Pi OS (other)** $\rightarrow$ **Raspberry Pi OS Lite (64-bit)**.
+
+### 7. Select Storage
+
+Under **Storage**, choose the SD card that you inserted earlier.
+
+### 8. Proceed to Settings
+
+Press **Next** to continue.
+
+### 9. Edit Settings
+
+Click on **Edit Settings** to configure the Raspberry Pi’s network, hostname, and other settings. Enter the following:
+
+**General:**
+
+* **Set Hostname:** `ninja-pi.local`
+
+* **Set Username:** `NinjaNIRS`
+
+* **Set Password:** `nn2022pidev`
+
+**LAN Settings:**
+
+* **SSID (Wi-Fi network name):** `ninjaGUIpy`
+
+* **Password:** `ninjaGUIpy2023`
+
+* **Wireless LAN Country:** `US`
+
+**Set Time Zone:**
+
+* Configure the correct time zone (for example, `America/New_York` if you're in the Eastern Time Zone).
+
+### 10. Services
+
+Enable **SSH** and select **Use password authentication**.
+
+### 11. Options
+
+Uncheck **Enable telemetry**.
+
+Once all settings are configured, press **Save**.
+
+### 12. Write to SD Card
+
+After saving, you'll be asked to confirm; press **Yes** to begin writing the Raspberry Pi OS to the SD card.
+
+### 13. Completion
+
+Wait for the process to finish. Once done, safely eject the SD card and insert it into your Raspberry Pi 5.
+
+Your Raspberry Pi 5 is now set up with the **ninjaWeb** configuration. Proceed to power it up and connect it to the internet via LAN or Wi-Fi, and you should be good to go!
 
 ---
 
