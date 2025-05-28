@@ -10,6 +10,7 @@ This guide outlines the steps to set up your **Raspberry Pi 5** for the **ninjaW
 * [Setup Wi-Fi Router / Mobile Hotspot](#setup-wi-fi-router--mobile-hotspot)
 * [Copy ninjaWeb Code to Raspberry Pi](#copy-ninjaweb-code-to-raspberry-pi)
 * [SSH into Raspberry Pi](#ssh-into-raspberry-pi)
+* [Enable SPI kernal module](#Enable-SPI-kernal-module)
 * [Setup `data-server` and `bokeh-server` Environments](#Setup-data-server-and-bokeh-server-Environments)
 
 ---
@@ -157,9 +158,13 @@ Here are the SSH details:
 
 ---
 
+## Enable SPI kernal module
+
+Run ```sudo raspi-config``` in the terminal, select interface options and Enable automatic loading of SPI kernal module.
+
 ## Setup `data-server` and `bokeh-server` Environments
 
-Once you've SSH'd into the Raspberry Pi, run these commands to set up the `data-server` and `bokeh-server` environments:
+Now run these commands to set up the `data-server` and `bokeh-server` environments:
 
 ```bash
 cd ~/ninjaWeb/data-server/
