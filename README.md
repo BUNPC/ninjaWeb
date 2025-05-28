@@ -1,17 +1,15 @@
-# Setup Raspberry Pi 5 for ninjaWeb on Windows
-
-This guide outlines the steps to set up your **Raspberry Pi 5** for the **ninjaWeb** application using a Windows computer.
 
 ---
 
 ## Table of Contents
 
-* [Prepare Your SD Card with Raspberry Pi OS](#prepare-your-sd-card-with-raspberry-pi-os)
+* [Prepare Your SD Card with Raspberry Pi5 OS](#prepare-your-sd-card-with-raspberry-pi-os)
 * [Setup Wi-Fi Router / Mobile Hotspot](#setup-wi-fi-router--mobile-hotspot)
 * [Copy ninjaWeb Code to Raspberry Pi](#copy-ninjaweb-code-to-raspberry-pi)
 * [SSH into Raspberry Pi](#ssh-into-raspberry-pi)
 * [Enable SPI kernal module](#Enable-SPI-kernal-module)
 * [Setup `data-server` and `bokeh-server` Environments](#Setup-data-server-and-bokeh-server-Environments)
+* [Run ninjaWeb](#Run-NinjaWeb)
 
 ---
 
@@ -177,4 +175,6 @@ cd ~/ninjaWeb/bokeh-server/
 python3 -m venv .
 source ./bin/activate
 pip install -r requirements.txt
-deactivate
+deactivate```
+
+## Run NinjaWeb
