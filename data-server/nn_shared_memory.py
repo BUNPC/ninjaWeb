@@ -87,7 +87,7 @@ class NNSharedMemory:
                 ml_sig_dtype = np.int16
                 ml_sig_values_size = ml_length*np.dtype(ml_sig_dtype).itemsize
                 n_poor_srcs_size = n_srcs*np.dtype(ml_sig_dtype).itemsize
-                n_poor_dets_size = n_dets * np.dtype(ml_sig_dtype).itemsize
+                n_poor_dets_size = n_dets*np.dtype(ml_sig_dtype).itemsize
                 self.ml_sig_values = shared_memory.SharedMemory(name='ml_sig_values', create=True, size=ml_sig_values_size)
                 self.n_poor_srcs = shared_memory.SharedMemory(name='n_poor_srcs', create=True,
                                                                 size=n_poor_srcs_size)
