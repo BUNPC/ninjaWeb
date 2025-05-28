@@ -160,6 +160,8 @@ Here are the SSH details:
 
 Run ```sudo raspi-config``` in the terminal, select interface options and Enable automatic loading of SPI kernal module.
 
+---
+
 ## Setup `data-server` and `bokeh-server` Environments
 
 Now run these commands to set up the `data-server` and `bokeh-server` environments:
@@ -175,6 +177,7 @@ cd ~/ninjaWeb/bokeh-server/
 python3 -m venv .
 source ./bin/activate
 pip install -r requirements.txt
-deactivate```
+deactivate
 
+---
 ## Run NinjaWeb
