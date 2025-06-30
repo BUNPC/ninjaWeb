@@ -96,8 +96,10 @@ class NNSystem():
         self.n_smp = 0
         self.acc_active = 0
         self.detb_active = [0]*self.N_DET_SLOTS
+        self.imub_active = [0]*self.N_DET_SLOTS
         self.srcb_active = [0]*self.N_SRC_SLOTS
         self.n_detb_active = 0
+        self.n_imub_active = 0
         self.n_srcb_active = 0
         self.aux_active = self.config.getboolean('aux_active')
 
@@ -176,8 +178,8 @@ class NNSystem():
         # Data transmission management
         # number of B states allocated to each UART data source (det boards + IMU)
         ni_bsel = floor((self.n_states_b - round(t_end_cyc/t_state_b) - 2 -
-                        (self.n_detb_active+1+1)*ceil(t_bsel_holdoff/t_state_b) )
-                         / (self.n_detb_active+1))
+                        (self.n_detb_active+self.n_imub_active+1+1)*ceil(t_bsel_holdoff/t_state_b) )
+                         / (self.n_detb_active+self.n_imub_active+1))
         if ni_bsel*t_state_b < t_bsel_min:
             print("Warning: t_bsel too short.")
 
@@ -185,7 +187,7 @@ class NNSystem():
         self.ramb[start_idx-2, 8] = 1                       # transmit program counter A
         if self.aux_active:
             self.ramb[start_idx-1, 7] = 1                   # transmit aux data
-        for (ii, x) in enumerate(self.detb_active + [self.acc_active]):
+        for (ii, x) in enumerate(self.detb_active + self.imub_active + [self.acc_active]):
             if x:                                           # detector is active
                 # set source selector bits (UART Rx Mux)
                 for jj in range(ni_bsel):
@@ -279,18 +281,18 @@ class NNSystem():
         act_sd_boards_fname = 'act_sd_boards.pkl'
         try:
             f_act_sd = open(act_sd_boards_fname, 'rb')
-            self.detb_active, self.srcb_active, self.acc_active = pickle.load(f_act_sd)
+            self.detb_active, self.imub_active, self.srcb_active, self.acc_active = pickle.load(f_act_sd)
             self.updateBytesPerState()
             print(f"Loaded {act_sd_boards_fname}")
-            print(f"Assuming {self.n_srcb_active} source and {self.n_detb_active} detector cards. IMU active: {self.acc_active}")
+            print(f"Assuming {self.n_srcb_active} source, {self.n_imub_active} IMU, and {self.n_detb_active} detector cards. Control board IMU active: {self.acc_active}")
         except:
             self.updateActiveBrds()
             with open(act_sd_boards_fname, 'wb') as f_act_sd:
-                pickle.dump([self.detb_active, self.srcb_active, self.acc_active], f_act_sd)
+                pickle.dump([self.detb_active, self.imub_active, self.srcb_active, self.acc_active], f_act_sd)
         # Accelerometer / IMU constants
         # these are defined in the IMU MCU firmware
         # TODO: read this from the MCU directly (e.g. implement in status packet)
-        if self.acc_active:
+        if self.acc_active or self.n_imub_active>0:
             self.accfs = self.config.getfloat('accfs')
             self.gyrofs = self.config.getfloat('gyrofs')
 
@@ -307,6 +309,7 @@ class NNSystem():
             print("Warning: Detectors not powered, cannot determine active detectors accurately\n")
 
         self.detb_active = [0] * self.N_DET_SLOTS
+        self.imub_active = [0] * self.N_DET_SLOTS
         self.srcb_active = [0] * self.N_SRC_SLOTS
         self.acc_active = False
     
@@ -332,7 +335,7 @@ class NNSystem():
         self.rama[:, 8] = 1 # set stop bit
         self.uploadToRAM('a')
 
-        # Check for active/plugged in detector boards
+        # Check for active/plugged in detector or IMU boards
         for isrc in range(self.N_DET_SLOTS):
             self.flush()
             self.ramb = genSingleSourceRAMB(isrc)
@@ -346,12 +349,16 @@ class NNSystem():
             #    print(n_bytes_rxd)
             #    print(self.rxtx_buf[0:10])
             if n_bytes_rxd==self.N_BYTES_TO_READ_PER_DETB:
-                if self.rxtx_buf[0]==253 and self.rxtx_buf[1]==252:    # check packet header
+                if self.rxtx_buf[0]==253 and self.rxtx_buf[1]==252:    # check for detector packet header
                     self.detb_active[isrc] = True
+                elif self.rxtx_buf[0]==253 and self.rxtx_buf[1]==251:    # check for IMU packet header
+                    self.imub_active[isrc] = True
             self.flush()
 
         self.n_detb_active = sum(self.detb_active)
+        self.n_imub_active = sum(self.imub_active)
         print("{:d} detector adapter cards detected.".format(self.n_detb_active))
+        print("{:d} IMU adapter cards detected.".format(self.n_imub_active))
 
         # check IMU / accelerometer status
         self.ramb = genSingleSourceRAMB(self.N_DET_SLOTS)
@@ -369,7 +376,7 @@ class NNSystem():
         print(f"IMU active: {self.acc_active}")
         self.flush()
 
-        # Check for active/plugged in detector boards
+        # Check for active/plugged in source boards
         for isrc in range(self.N_SRC_SLOTS):
             self.flush()
             self.ramb = genSingleSourceRAMB(isrc+32, True)
@@ -401,6 +408,7 @@ class NNSystem():
     # ----------------------------------------------------------------------
     def updateBytesPerState(self):
         self.n_detb_active = sum(self.detb_active)
+        self.n_imub_active = sum(self.imub_active)
         self.n_srcb_active = sum(self.srcb_active)
         # calculate bytes per state
         #N_BYTES_TO_READ_PER_DETB_STATUS = 18
@@ -410,7 +418,7 @@ class NNSystem():
         N_BYTES_PER_AUX = 3
         N_BYTES_TO_READ_PER_AUX = 2+N_BYTES_PER_AUX*N_AUX_ADC
 
-        self.N_BYTES_TO_READ_PER_STATE = N_BYTES_TO_READ_PER_HEADER + self.N_BYTES_TO_READ_PER_DETB*self.n_detb_active \
+        self.N_BYTES_TO_READ_PER_STATE = N_BYTES_TO_READ_PER_HEADER + self.N_BYTES_TO_READ_PER_DETB*(self.n_detb_active+self.n_imub_active) \
             + self.acc_active*self.N_BYTES_TO_READ_PER_ACCELEROMETER + self.aux_active*N_BYTES_TO_READ_PER_AUX
 
     
