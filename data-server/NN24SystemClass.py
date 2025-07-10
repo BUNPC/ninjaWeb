@@ -373,7 +373,7 @@ class NNSystem():
                 # buf(4:5) would be the temperature reading, which is unlikely = 0
                 if self.rxtx_buf[3]!=0 or self.rxtx_buf[4]!=0:
                     self.acc_active = True
-        print(f"IMU active: {self.acc_active}")
+        print(f"Control board IMU active: {self.acc_active}")
         self.flush()
 
         # Check for active/plugged in source boards
